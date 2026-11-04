@@ -3,6 +3,7 @@
 
 #include "pch.h"
 #include "GreenEnv.h"
+#include "AppConfig.h"
 #include <shlwapi.h>
 #include <shlobj.h>
 #pragma comment(lib, "shlwapi.lib")
@@ -128,27 +129,33 @@ static bool WriteTextFileUtf8(const CString& strPath, const CString& strText)
 
 
 
-static CString GetProjectRootFilePath()
+static CString GetLegacyConfigFilePath(LPCTSTR lpszName)
 {
 	CString strGreen = GetGreenRoot();
 	if (strGreen.IsEmpty())
 		return _T("");
-	return strGreen + _T("\\config\\project_root.txt");
+	return strGreen + _T("\\config\\") + lpszName;
 }
 
 CString GetProjectRoot()
 {
-	CString strFile = GetProjectRootFilePath();
-	if (strFile.IsEmpty() || !::PathFileExists(strFile))
-		return _T("");
+	CAppConfig& cfg = CAppConfig::Instance();
+	CString strRoot = cfg.strProjectRoot;
+	strRoot.Trim();
+	if (!strRoot.IsEmpty() && ::PathIsDirectory(strRoot))
+		return strRoot;
 
+	CString strFile = GetLegacyConfigFilePath(_T("project_root.txt"));
 	CString strText;
-	if (!ReadTextFileUtf8(strFile, strText))
+	if (strFile.IsEmpty() || !::PathFileExists(strFile) || !ReadTextFileUtf8(strFile, strText))
 		return _T("");
 
 	strText.Trim();
 	if (!::PathIsDirectory(strText))
-		return _T("");   
+		return _T("");
+
+	cfg.strProjectRoot = strText;
+	cfg.SaveAll();
 	return strText;
 }
 
@@ -246,16 +253,9 @@ bool SetProjectRoot(LPCTSTR lpszPath)
 	while (strRoot.GetLength() > 3 && strRoot[strRoot.GetLength() - 1] == _T('\\'))
 		strRoot = strRoot.Left(strRoot.GetLength() - 1);
 
-	CString strFile = GetProjectRootFilePath();
-	if (strFile.IsEmpty())
-		return false;
-
-	TCHAR szDir[MAX_PATH] = { 0 };
-	_tcsncpy_s(szDir, strFile, _TRUNCATE);
-	::PathRemoveFileSpec(szDir);
-	::SHCreateDirectoryEx(NULL, szDir, NULL);
-
-	return WriteTextFileUtf8(strFile, strRoot);
+	CAppConfig& cfg = CAppConfig::Instance();
+	cfg.strProjectRoot = strRoot;
+	return cfg.SaveAll();
 }
 
 
@@ -338,45 +338,33 @@ CString GetDatasetDir()
 }
 
 
-static CString GetLastTestModelFilePath()
-{
-	CString strGreen = GetGreenRoot();
-	if (strGreen.IsEmpty())
-		return _T("");
-	return strGreen + _T("\\config\\last_test_model.txt");
-}
-
 CString GetLastTestModel()
 {
-	CString strFile = GetLastTestModelFilePath();
-	if (strFile.IsEmpty() || !::PathFileExists(strFile))
-		return _T("");
+	CAppConfig& cfg = CAppConfig::Instance();
+	CString strPath = cfg.strTestModel;
+	strPath.Trim();
+	if (!strPath.IsEmpty() && ::PathFileExists(strPath))
+		return strPath;
 
+	CString strFile = GetLegacyConfigFilePath(_T("last_test_model.txt"));
 	CString strText;
-	if (!ReadTextFileUtf8(strFile, strText))
+	if (strFile.IsEmpty() || !::PathFileExists(strFile) || !ReadTextFileUtf8(strFile, strText))
 		return _T("");
 
 	strText.Trim();
-	if (strText.IsEmpty() || !::PathFileExists(strText))
-		return _T("");   
+	if (!::PathFileExists(strText))
+		return _T("");
+
+	cfg.strTestModel = strText;
+	cfg.SaveAll();
 	return strText;
 }
 
 void SetLastTestModel(LPCTSTR lpszPath)
 {
-	CString strFile = GetLastTestModelFilePath();
-	if (strFile.IsEmpty())
-		return;
-
-	TCHAR szDir[MAX_PATH] = { 0 };
-	_tcsncpy_s(szDir, strFile, _TRUNCATE);
-	::PathRemoveFileSpec(szDir);
-	::SHCreateDirectoryEx(NULL, szDir, NULL);
-
+	CAppConfig& cfg = CAppConfig::Instance();
 	CString strText = lpszPath ? lpszPath : _T("");
 	strText.Trim();
-	if (strText.IsEmpty())
-		::DeleteFile(strFile);
-	else
-		WriteTextFileUtf8(strFile, strText);
+	cfg.strTestModel = strText;
+	cfg.SaveAll();
 }

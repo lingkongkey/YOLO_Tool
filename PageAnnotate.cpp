@@ -136,24 +136,7 @@ BOOL CPageAnnotate::OnInitDialog()
 		if (strModel.IsEmpty())
 			strModel = g_aiPresets[nSel].szModel;
 		SetDlgItemText(IDC_EDIT_AI_MODEL, strModel);
-	}
-
-	{
-		CComboBox* pW = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_ANN);
-		if (pW != NULL)
-		{
-
-			for (INT_PTR i = 0; i < pW->GetCount(); i++)
-			{
-				CString strItem;
-				pW->GetLBText(i, strItem);
-				if (strItem.Find(cfg.strTrainWeights) >= 0 || cfg.strTrainWeights.Find(strItem) >= 0)
-				{
-					pW->SetCurSel((int)i);
-					break;
-				}
-			}
-		}
+		SetDlgItemText(IDC_EDIT_AI_KEY, cfg.strAiKey);
 	}
 
 	CString strDataset = GetDatasetDir();
@@ -1467,10 +1450,8 @@ LRESULT CPageAnnotate::OnProcExit(WPARAM wParam, LPARAM /*lParam*/)
 	return 0;
 }
 
-void CPageAnnotate::OnDestroy()
+void CPageAnnotate::SaveConfig()
 {
-
-	m_capture.Stop();
 	CAppConfig& cfg = CAppConfig::Instance();
 	GetDlgItemText(IDC_EDIT_AI_KEY, cfg.strAiKey);
 	CComboBox* pProvider = (CComboBox*)GetDlgItem(IDC_COMBO_AI_PROVIDER);
@@ -1481,16 +1462,11 @@ void CPageAnnotate::OnDestroy()
 			cfg.strAiProvider = g_aiPresets[nSel].szName;
 	}
 	GetDlgItemText(IDC_EDIT_AI_MODEL, cfg.strAiModel);
-	GetDlgItemText(IDC_EDIT_CONF, cfg.strAnnotateConf);
+}
 
-	CComboBox* pW = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_ANN);
-	if (pW != NULL)
-	{
-		CString strWeight;
-		pW->GetWindowText(strWeight);
-		cfg.strTrainWeights = strWeight;
-	}
-
+void CPageAnnotate::OnDestroy()
+{
+	m_capture.Stop();
 	CDialogEx::OnDestroy();
 }
 

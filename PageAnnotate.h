@@ -13,6 +13,7 @@ class CPageAnnotate : public CDialogEx
 {
 public:
 	CPageAnnotate(CWnd* pParent = nullptr);
+	void SaveConfig();
 
 #ifdef AFX_DESIGN_TIME
 	enum { IDD = IDD_PAGE_ANNOTATE };

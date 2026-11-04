@@ -181,33 +181,7 @@ BOOL CYOLOToolDlg::OnHelpInfo(HELPINFO* pHelpInfo)
 
 void CYOLOToolDlg::OnClose()
 {
-	
-	CAppConfig& cfg = CAppConfig::Instance();
-
-	cfg.nCurPage = m_tab.GetCurSel();
-
-	WINDOWPLACEMENT wp = { 0 };
-	wp.length = sizeof(wp);
-	if (GetWindowPlacement(&wp))
-	{
-		cfg.bWinMaximized = (wp.showCmd == SW_SHOWMAXIMIZED);
-		if (cfg.bWinMaximized)
-		{
-			cfg.nWinLeft   = wp.rcNormalPosition.left;
-			cfg.nWinTop    = wp.rcNormalPosition.top;
-			cfg.nWinWidth  = wp.rcNormalPosition.right - wp.rcNormalPosition.left;
-			cfg.nWinHeight = wp.rcNormalPosition.bottom - wp.rcNormalPosition.top;
-		}
-		else
-		{
-			cfg.nWinLeft   = wp.rcNormalPosition.left;
-			cfg.nWinTop    = wp.rcNormalPosition.top;
-			cfg.nWinWidth  = wp.rcNormalPosition.right - wp.rcNormalPosition.left;
-			cfg.nWinHeight = wp.rcNormalPosition.bottom - wp.rcNormalPosition.top;
-		}
-	}
-
-	cfg.SaveAll();
-
+	m_pageAnnotate.SaveConfig();
+	CAppConfig::Instance().SaveAll();
 	CDialogEx::OnClose();
 }

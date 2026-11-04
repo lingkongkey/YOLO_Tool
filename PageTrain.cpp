@@ -44,66 +44,18 @@ BOOL CPageTrain::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
 
-	CAppConfig& cfg = CAppConfig::Instance();
-
 	FillWeightsCombo();
 	FillExportFormats();
 
 	RefreshEpochsDefault();
-	if (!cfg.strTrainEpochs.IsEmpty())
-		SetDlgItemText(IDC_EDIT_EPOCHS, cfg.strTrainEpochs);
-
-	SetDlgItemText(IDC_EDIT_IMGSZ, cfg.strTrainImgsz.IsEmpty() ? _T("640") : cfg.strTrainImgsz);
-	SetDlgItemText(IDC_EDIT_BATCH, cfg.strTrainBatch.IsEmpty() ? _T("4") : cfg.strTrainBatch);
+	SetDlgItemText(IDC_EDIT_IMGSZ, _T("640"));
+	SetDlgItemText(IDC_EDIT_BATCH, _T("4"));
 
 	GetDlgItem(IDC_BTN_TRAIN_STOP)->EnableWindow(FALSE);
 
-		if (GetGreenGpuRoot().IsEmpty())
-	{
+	if (GetGreenGpuRoot().IsEmpty())
 		GetDlgItem(IDC_CHK_GPU)->EnableWindow(FALSE);
-		CheckDlgButton(IDC_CHK_GPU, BST_UNCHECKED);
-	}
-	else
-	{
-		CheckDlgButton(IDC_CHK_GPU, cfg.bTrainGpu ? BST_CHECKED : BST_UNCHECKED);
-	}
-
-		if (!cfg.strTrainWeights.IsEmpty())
-	{
-		CComboBox* pW = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_TRAIN);
-		if (pW != NULL)
-		{
-			for (INT_PTR i = 0; i < pW->GetCount(); i++)
-			{
-				CString strItem;
-				pW->GetLBText(i, strItem);
-				if (strItem.Find(cfg.strTrainWeights) >= 0 || cfg.strTrainWeights.Find(strItem) >= 0)
-				{
-					pW->SetCurSel((int)i);
-					break;
-				}
-			}
-		}
-	}
-
-
-	if (!cfg.strTrainExportFormat.IsEmpty())
-	{
-		CComboBox* pE = (CComboBox*)GetDlgItem(IDC_COMBO_EXPORT_FMT);
-		if (pE != NULL)
-		{
-			for (INT_PTR i = 0; i < pE->GetCount(); i++)
-			{
-				CString strItem;
-				pE->GetLBText(i, strItem);
-				if (strItem.CompareNoCase(cfg.strTrainExportFormat) == 0)
-				{
-					pE->SetCurSel((int)i);
-					break;
-				}
-			}
-		}
-	}
+	CheckDlgButton(IDC_CHK_GPU, BST_UNCHECKED);
 
 	SetStatus(_T("就绪"));
 	Layout();
@@ -645,28 +597,6 @@ void CPageTrain::StartExport()
 void CPageTrain::OnDestroy()
 {
 	m_capture.Stop();
-	CAppConfig& cfg = CAppConfig::Instance();
-	GetDlgItemText(IDC_EDIT_EPOCHS, cfg.strTrainEpochs);
-	GetDlgItemText(IDC_EDIT_IMGSZ, cfg.strTrainImgsz);
-	GetDlgItemText(IDC_EDIT_BATCH, cfg.strTrainBatch);
-	cfg.bTrainGpu = (IsDlgButtonChecked(IDC_CHK_GPU) == BST_CHECKED);
-
-	CComboBox* pW = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_TRAIN);
-	if (pW != NULL)
-	{
-		CString strWeight;
-		pW->GetWindowText(strWeight);
-		cfg.strTrainWeights = strWeight;
-	}
-
-	CComboBox* pE = (CComboBox*)GetDlgItem(IDC_COMBO_EXPORT_FMT);
-	if (pE != NULL)
-	{
-		CString strFmt;
-		pE->GetWindowText(strFmt);
-		cfg.strTrainExportFormat = strFmt;
-	}
-
 	CDialogEx::OnDestroy();
 }
 

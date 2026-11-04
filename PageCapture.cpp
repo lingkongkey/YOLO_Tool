@@ -61,21 +61,14 @@ BOOL CPageCapture::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
 
-	CAppConfig& cfg = CAppConfig::Instance();
-
 	CSpinButtonCtrl* pSpin = (CSpinButtonCtrl*)GetDlgItem(IDC_SPIN_INTERVAL);
 	if (pSpin != NULL)
 		pSpin->SetRange32(100, 600000);
 
-	CString strInterval;
-	strInterval.Format(_T("%d"), cfg.nCaptureInterval);
-	SetDlgItemText(IDC_EDIT_INTERVAL, strInterval);
+	SetDlgItemText(IDC_EDIT_INTERVAL, _T("1000"));
+	CheckDlgButton(IDC_CHK_CLIENT, BST_CHECKED);
 
-	CheckDlgButton(IDC_CHK_CLIENT, cfg.bCaptureClientOnly ? BST_CHECKED : BST_UNCHECKED);
-
-	m_strSaveDir = cfg.strCaptureSaveDir;
-	if (m_strSaveDir.IsEmpty())
-		m_strSaveDir = GetDefaultSaveDir();
+	m_strSaveDir = GetDefaultSaveDir();
 	SetDlgItemText(IDC_EDIT_SAVE_DIR, m_strSaveDir);
 
 	RefreshDirCount();
@@ -137,14 +130,6 @@ void CPageCapture::OnDestroy()
 		m_bAuto = false;
 	}
 	KillTimer(IDT_STATUS_REFRESH);
-
-	CAppConfig& cfg = CAppConfig::Instance();
-	CString strInterval;
-	GetDlgItemText(IDC_EDIT_INTERVAL, strInterval);
-	int nInterval = _ttoi(strInterval);
-	if (nInterval > 0) cfg.nCaptureInterval = nInterval;
-	cfg.bCaptureClientOnly = (IsDlgButtonChecked(IDC_CHK_CLIENT) == BST_CHECKED);
-	cfg.strCaptureSaveDir = m_strSaveDir;
 
 	CDialogEx::OnDestroy();
 }

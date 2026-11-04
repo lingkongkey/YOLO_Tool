@@ -25,35 +25,13 @@ CAppConfig::~CAppConfig()
 
 void CAppConfig::SetDefaults()
 {
-	// Capture
-	strCaptureSaveDir = _T("");
-	nCaptureInterval  = 1000;
-	bCaptureClientOnly = true;
+	strProjectRoot = _T("");
 
-	// Annotate
-	strAiKey       = _T("");
-	strAiProvider  = _T("doubao");
-	strAiModel     = _T("Doubao - Seed - Evolving");
-	strAnnotateConf = _T("0.5");
+	strAiKey      = _T("");
+	strAiProvider = _T("");
+	strAiModel    = _T("");
 
-	// Train
-	strTrainWeights      = _T("");
-	strTrainEpochs       = _T("100");
-	strTrainImgsz        = _T("640");
-	strTrainBatch        = _T("4");
-	bTrainGpu            = false;
-	strTrainExportFormat = _T("ncnn");
-
-	// Test
-	bTestClientOnly = true;
-
-	// Window
-	nWinLeft   = CW_USEDEFAULT;
-	nWinTop    = CW_USEDEFAULT;
-	nWinWidth  = 1280;
-	nWinHeight = 800;
-	bWinMaximized = false;
-	nCurPage   = 0;
+	strTestModel  = _T("");
 }
 
 bool CAppConfig::EnsureIniOpen()
@@ -87,22 +65,6 @@ CString CAppConfig::FromUtf8(const std::string& str)
 	return strOut;
 }
 
-int CAppConfig::ToInt(const CString& str, int nDefault)
-{
-	if (str.IsEmpty()) return nDefault;
-	return _ttoi(str);
-}
-
-bool CAppConfig::ToBool(const CString& str, bool bDefault)
-{
-	if (str.IsEmpty()) return bDefault;
-	CString s = str;
-	s.Trim();
-	if (s == _T("1") || s.CompareNoCase(_T("true")) == 0) return true;
-	if (s == _T("0") || s.CompareNoCase(_T("false")) == 0) return false;
-	return bDefault;
-}
-
 CString CAppConfig::ReadStr(const char* section, const char* key, const CString& strDefault)
 {
 	if (!EnsureIniOpen()) return strDefault;
@@ -123,60 +85,18 @@ void CAppConfig::WriteStr(const char* section, const char* key, const CString& s
 	ini.WriteIni(fullKey, ToUtf8(strValue));
 }
 
-int CAppConfig::ReadInt(const char* section, const char* key, int nDefault)
-{
-	CString v = ReadStr(section, key, CString());
-	if (v.IsEmpty()) return nDefault;
-	return ToInt(v, nDefault);
-}
-
-void CAppConfig::WriteInt(const char* section, const char* key, int nValue)
-{
-	CString v; v.Format(_T("%d"), nValue);
-	WriteStr(section, key, v);
-}
-
-bool CAppConfig::ReadBool(const char* section, const char* key, bool bDefault)
-{
-	CString v = ReadStr(section, key, CString());
-	if (v.IsEmpty()) return bDefault;
-	return ToBool(v, bDefault);
-}
-
-void CAppConfig::WriteBool(const char* section, const char* key, bool bValue)
-{
-	WriteStr(section, key, bValue ? _T("1") : _T("0"));
-}
-
 bool CAppConfig::LoadAll()
 {
 	SetDefaults();
 	if (!EnsureIniOpen()) return false;
 
-	strCaptureSaveDir  = ReadStr("Capture", "SaveDir",     strCaptureSaveDir);
-	nCaptureInterval   = ReadInt ("Capture", "Interval",   nCaptureInterval);
-	bCaptureClientOnly = ReadBool("Capture", "ClientOnly", bCaptureClientOnly);
+	strProjectRoot = ReadStr("Project", "Root",       strProjectRoot);
 
 	strAiKey       = ReadStr("Annotate", "AiKey",       strAiKey);
 	strAiProvider  = ReadStr("Annotate", "AiProvider",  strAiProvider);
 	strAiModel     = ReadStr("Annotate", "AiModel",     strAiModel);
-	strAnnotateConf= ReadStr("Annotate", "Conf",        strAnnotateConf);
 
-	strTrainWeights      = ReadStr("Train", "Weights",      strTrainWeights);
-	strTrainEpochs       = ReadStr("Train", "Epochs",       strTrainEpochs);
-	strTrainImgsz        = ReadStr("Train", "Imgsz",        strTrainImgsz);
-	strTrainBatch        = ReadStr("Train", "Batch",        strTrainBatch);
-	bTrainGpu            = ReadBool("Train", "Gpu",         bTrainGpu);
-	strTrainExportFormat = ReadStr("Train", "ExportFormat", strTrainExportFormat);
-
-	bTestClientOnly = ReadBool("Test", "ClientOnly", bTestClientOnly);
-
-	nWinLeft      = ReadInt ("Window", "Left",      nWinLeft);
-	nWinTop       = ReadInt ("Window", "Top",       nWinTop);
-	nWinWidth     = ReadInt ("Window", "Width",     nWinWidth);
-	nWinHeight    = ReadInt ("Window", "Height",    nWinHeight);
-	bWinMaximized = ReadBool("Window", "Maximized", bWinMaximized);
-	nCurPage      = ReadInt ("Window", "CurPage",   nCurPage);
+	strTestModel   = ReadStr("Test", "Model",          strTestModel);
 
 	return true;
 }
@@ -185,30 +105,13 @@ bool CAppConfig::SaveAll()
 {
 	if (!EnsureIniOpen()) return false;
 
-	WriteStr ("Capture", "SaveDir",     strCaptureSaveDir);
-	WriteInt ("Capture", "Interval",    nCaptureInterval);
-	WriteBool("Capture", "ClientOnly",  bCaptureClientOnly);
+	WriteStr("Project",  "Root",        strProjectRoot);
 
-	WriteStr ("Annotate", "AiKey",       strAiKey);
-	WriteStr ("Annotate", "AiProvider",  strAiProvider);
-	WriteStr ("Annotate", "AiModel",     strAiModel);
-	WriteStr ("Annotate", "Conf",       strAnnotateConf);
+	WriteStr("Annotate", "AiKey",       strAiKey);
+	WriteStr("Annotate", "AiProvider",  strAiProvider);
+	WriteStr("Annotate", "AiModel",     strAiModel);
 
-	WriteStr ("Train", "Weights",        strTrainWeights);
-	WriteStr ("Train", "Epochs",         strTrainEpochs);
-	WriteStr ("Train", "Imgsz",          strTrainImgsz);
-	WriteStr ("Train", "Batch",          strTrainBatch);
-	WriteBool("Train", "Gpu",            bTrainGpu);
-	WriteStr ("Train", "ExportFormat",   strTrainExportFormat);
-
-	WriteBool("Test", "ClientOnly",     bTestClientOnly);
-
-	WriteInt ("Window", "Left",          nWinLeft);
-	WriteInt ("Window", "Top",           nWinTop);
-	WriteInt ("Window", "Width",         nWinWidth);
-	WriteInt ("Window", "Height",        nWinHeight);
-	WriteBool("Window", "Maximized",     bWinMaximized);
-	WriteInt ("Window", "CurPage",       nCurPage);
+	WriteStr("Test",     "Model",       strTestModel);
 
 	return true;
 }
