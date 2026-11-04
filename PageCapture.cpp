@@ -93,12 +93,14 @@ void CPageCapture::OnSize(UINT nType, int cx, int cy)
 	CListBox* p=(CListBox*)GetDlgItem(IDC_LIST_CAPTURES);
 	if (p)
 	{
-		CRect rcCtrl;
+		CRect rcCtrl, rcCtrl2;
 		p->GetWindowRect(&rcCtrl);       
 		ScreenToClient(&rcCtrl);         
 		CRect rcNew = rcCtrl;
-		rcNew.bottom = cy - 3;  
+		rcNew.bottom = cy - 10;  
+		//rcNew.right = cx - 10;
 		p->MoveWindow(&rcNew);
+
 
 		p = (CListBox*)GetDlgItem(IDC_GRP_PREVIEW);
 		if (p)
@@ -106,8 +108,8 @@ void CPageCapture::OnSize(UINT nType, int cx, int cy)
 			p->GetWindowRect(&rcCtrl);      
 			ScreenToClient(&rcCtrl);        
 			CRect rcNew = rcCtrl;
-			rcNew.bottom = cy - 1;  
-			rcNew.right = cx - 1;
+			rcNew.bottom = cy - 10;  
+			rcNew.right = cx - 10;
 			p->MoveWindow(&rcNew);
 		}
 		p = (CListBox*)GetDlgItem(IDC_PREVIEW);
@@ -116,8 +118,8 @@ void CPageCapture::OnSize(UINT nType, int cx, int cy)
 			p->GetWindowRect(&rcCtrl);      
 			ScreenToClient(&rcCtrl);        
 			CRect rcNew = rcCtrl;
-			rcNew.bottom = cy - 3;   
-			rcNew.right = cx - 3;
+			rcNew.bottom = cy - 10;   
+			rcNew.right = cx - 10;
 			p->MoveWindow(&rcNew);
 		}
 

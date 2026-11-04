@@ -160,7 +160,7 @@ void CPageTest::Layout()
 	x += 28 + 4;
 	mv(IDC_EDIT_TEST_IOU, x, ROW2, 42, CH);
 
-	mv(IDC_STATIC_TEST_ZOOM, W - M - 56, ROW2 + 6, 56, 14);
+	mv(IDC_STATIC_TEST_ZOOM, W - M - 80, ROW2 + 6, 56, 14);
 
 	int nPreviewY = ROW2 + CH + 8;
 	int nBarY = H - M - BARH;

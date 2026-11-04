@@ -103,8 +103,8 @@ void CYOLOToolDlg::OnSize(UINT nType, int cx, int cy)
 		p->GetWindowRect(&rcCtrl);
 		ScreenToClient(&rcCtrl);  
 		CRect rcNew = rcCtrl;
-		rcNew.bottom = cy - 2;   
-
+		rcNew.bottom = cy - 5;   
+		rcNew.right = cx - 5;
 		p->MoveWindow(&rcNew);
 
 		CRect tabRect, tabRect2;
