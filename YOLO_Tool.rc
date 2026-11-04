@@ -1,0 +1,308 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "targetver.h"
+
+#include "afxres.h"
+#include "verrsrc.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// 中文(简体，中国) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+#pragma code_page(936)
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "#include ""targetver.h""\r\n"
+    "\r\n"
+    "#include ""afxres.h""\r\n"
+    "#include ""verrsrc.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDR_MAINFRAME           ICON                    "res\\lwsoftexe.ico"
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_YOLO_TOOL_DIALOG DIALOGEX 0, 0, 795, 421
+STYLE DS_SETFONT | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
+EXSTYLE WS_EX_APPWINDOW
+CAPTION "YOLO 综合工具"
+FONT 9, "微软雅黑", 400, 0, 0x86
+BEGIN
+    CONTROL         "",IDC_TAB,"SysTabControl32",WS_CLIPSIBLINGS | WS_TABSTOP,7,3,784,410
+END
+
+IDD_PAGE_CAPTURE DIALOGEX 0, 0, 801, 335
+STYLE DS_SETFONT | DS_CONTROL | WS_CHILD | WS_VISIBLE
+FONT 9, "微软雅黑", 400, 0, 0x86
+BEGIN
+    GROUPBOX        "目标窗口",IDC_GRP_TARGET,7,7,265,59
+    LTEXT           "句柄:",IDC_LBL_HANDLE,16,24,26,10
+    EDITTEXT        IDC_EDIT_HANDLE,44,22,66,13,ES_AUTOHSCROLL
+    PUSHBUTTON      "查看标题",IDC_BTN_CHECK,116,21,44,15
+    LTEXT           "",IDC_FINDER,168,18,24,24,SS_NOTIFY | SS_SUNKEN | NOT WS_GROUP
+    LTEXT           "按住准星拖到目标窗口",IDC_LBL_FINDER_TIP,198,24,96,10
+    LTEXT           "窗口标题:",IDC_LBL_TITLE,16,46,40,10
+    EDITTEXT        IDC_EDIT_TITLE,58,44,103,13,ES_AUTOHSCROLL | ES_READONLY
+    CONTROL         "仅截客户区",IDC_CHK_CLIENT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,170,47,66,10
+    GROUPBOX        "截图设置",IDC_GRP_SNAP,281,11,248,33
+    LTEXT           "间隔(毫秒):",IDC_LBL_INTERVAL,290,27,52,10
+    EDITTEXT        IDC_EDIT_INTERVAL,346,24,46,13,ES_NUMBER
+    CONTROL         "",IDC_SPIN_INTERVAL,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS,393,24,11,13
+    LTEXT           "(1000=1秒)",IDC_LBL_INTERVAL_HINT,405,27,37,10
+    LTEXT           "项目目录:",IDC_LBL_SAVE_DIR,274,50,35,10
+    EDITTEXT        IDC_EDIT_SAVE_DIR,309,48,206,13,ES_AUTOHSCROLL
+    PUSHBUTTON      "浏览...",IDC_BTN_BROWSE,519,47,40,15
+    DEFPUSHBUTTON   "自动截图",IDC_BTN_AUTO,447,25,40,14
+    PUSHBUTTON      "截图",IDC_BTN_MANUAL,490,25,30,14
+    LTEXT           "准备就绪",IDC_STATIC_STATUS,563,5,121,54
+    LISTBOX         IDC_LIST_CAPTURES,7,75,110,251,LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
+    GROUPBOX        "预览",IDC_GRP_PREVIEW,122,72,650,259
+    LTEXT           "",IDC_PREVIEW,125,80,643,245,SS_NOTIFY | SS_SUNKEN | NOT WS_GROUP
+END
+
+IDD_PAGE_ANNOTATE DIALOGEX 0, 0, 648, 496
+STYLE DS_SETFONT | DS_CONTROL | WS_CHILD
+FONT 9, "微软雅黑", 400, 0, 0x86
+BEGIN
+    GROUPBOX        "图像列表",IDC_GRP_IMAGES,7,7,150,300
+    LISTBOX         IDC_LIST_IMAGES,13,20,138,220,LBS_NOINTEGRALHEIGHT | LBS_EXTENDEDSEL | WS_VSCROLL
+    PUSHBUTTON      "上一张",IDC_BTN_PREV,13,246,44,16
+    PUSHBUTTON      "下一张",IDC_BTN_NEXT,61,246,44,16
+    PUSHBUTTON      "刷新",IDC_BTN_REFRESH,109,246,42,16
+    PUSHBUTTON      "放大",IDC_BTN_ZOOM_IN,168,7,46,18
+    PUSHBUTTON      "缩小",IDC_BTN_ZOOM_OUT,218,7,46,18
+    PUSHBUTTON      "适应窗口",IDC_BTN_ZOOM_FIT,268,7,60,18
+    PUSHBUTTON      "保存标注",IDC_BTN_SAVE_LABELS,332,7,64,18
+    PUSHBUTTON      "删除选中框",IDC_BTN_DEL_BOX,400,7,51,18
+    LTEXT           "AI Key:",IDC_LBL_AI_KEY,168,32,40,10
+    EDITTEXT        IDC_EDIT_AI_KEY,210,30,150,13,ES_PASSWORD | ES_AUTOHSCROLL
+    COMBOBOX        IDC_COMBO_AI_PROVIDER,364,30,90,90,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "模型:",IDC_LBL_AI_MODEL,487,53,24,10
+    EDITTEXT        IDC_EDIT_AI_MODEL,484,30,60,13,ES_AUTOHSCROLL
+    PUSHBUTTON      "开始AI标注",IDC_BTN_AI_ANNOTATE,364,48,64,16
+    GROUPBOX        "类别",IDC_GRP_CLASSES,293,31,158,150
+    EDITTEXT        IDC_EDIT_CLASSES,299,44,146,80,ES_MULTILINE | ES_WANTRETURN | WS_VSCROLL
+    PUSHBUTTON      "保存类别",IDC_BTN_SAVE_CLASSES,299,128,146,16
+    LTEXT           "当前类别:",IDC_LBL_CLASS_CURRENT,299,150,44,10
+    COMBOBOX        IDC_COMBO_CLASSES,345,148,100,90,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    GROUPBOX        "预标注",IDC_GRP_ANNOTATE,293,185,158,86
+    LTEXT           "权重:",IDC_LBL_WEIGHTS_ANN,299,200,26,10
+    COMBOBOX        IDC_COMBO_WEIGHTS_ANN,299,212,146,90,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "置信度:",IDC_LBL_CONF,299,232,36,10
+    EDITTEXT        IDC_EDIT_CONF,337,230,40,13
+    PUSHBUTTON      "开始预标注",IDC_BTN_ANNOTATE,299,248,70,16
+    PUSHBUTTON      "打开 labelImg",IDC_BTN_LABELIMG,375,248,70,16
+    GROUPBOX        "日志",IDC_GRP_LOG_ANN,293,343,158,39
+    EDITTEXT        IDC_EDIT_LOG_ANN,299,355,146,21,ES_MULTILINE | ES_READONLY | WS_VSCROLL
+    LTEXT           "就绪",IDC_STATIC_ANN_STATUS,7,310,440,10
+END
+
+IDD_PAGE_TRAIN DIALOGEX 0, 0, 657, 321
+STYLE DS_SETFONT | DS_CONTROL | WS_CHILD
+FONT 9, "微软雅黑", 400, 0, 0x86
+BEGIN
+    GROUPBOX        "训练参数",IDC_GRP_TRAIN_PARAMS,7,7,444,90
+    LTEXT           "权重:",IDC_LBL_WEIGHTS_TRAIN,13,24,26,10
+    COMBOBOX        IDC_COMBO_WEIGHTS_TRAIN,42,22,100,90,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "epochs:",IDC_LBL_EPOCHS,152,24,36,10
+    EDITTEXT        IDC_EDIT_EPOCHS,190,22,36,13,ES_NUMBER
+    LTEXT           "imgsz:",IDC_LBL_IMGSZ,236,24,30,10
+    EDITTEXT        IDC_EDIT_IMGSZ,268,22,36,13,ES_NUMBER
+    LTEXT           "batch:",IDC_LBL_BATCH,314,24,28,10
+    EDITTEXT        IDC_EDIT_BATCH,344,22,36,13,ES_NUMBER
+    CONTROL         "续训",IDC_CHK_RESUME,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,386,24,40,14
+    CONTROL         "GPU训练",IDC_CHK_GPU,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,386,40,48,14
+    DEFPUSHBUTTON   "开始训练",IDC_BTN_TRAIN_START,1,46,52,18
+    PUSHBUTTON      "停止训练",IDC_BTN_TRAIN_STOP,121,44,44,18
+    LTEXT           "导出格式:",IDC_LBL_EXPORT_FMT,234,48,26,10
+    COMBOBOX        IDC_COMBO_EXPORT_FMT,273,72,72,120,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "导出",IDC_BTN_EXPORT,366,65,48,18
+    LTEXT           "就绪",IDC_STATIC_TRAIN_STATUS,231,48,210,10
+    GROUPBOX        "日志",IDC_GRP_LOG_TRAIN,7,108,444,206
+    EDITTEXT        IDC_EDIT_LOG_TRAIN,14,117,432,162,ES_MULTILINE | ES_READONLY | WS_VSCROLL
+END
+
+IDD_PAGE_TEST DIALOGEX 0, 0, 792, 421
+STYLE DS_SETFONT | DS_FIXEDSYS | DS_CONTROL | WS_CHILD
+FONT 9, "微软雅黑", 400, 0, 0x86
+BEGIN
+    LTEXT           "模型:",IDC_LBL_TEST_MODEL,8,10,24,10
+    COMBOBOX        IDC_COMBO_TEST_MODEL,36,8,300,120,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "输入尺寸:",IDC_LBL_TEST_IMGSZ,348,10,44,10
+    EDITTEXT        IDC_EDIT_TEST_IMGSZ,396,8,50,13,ES_NUMBER
+    PUSHBUTTON      "打开",IDC_BTN_TEST_OPEN,454,8,48,16
+    PUSHBUTTON      "刷新",IDC_BTN_TEST_REFRESH,508,8,48,16
+    LTEXT           "",IDC_FINDER_TEST,8,30,20,20,SS_NOTIFY | SS_SUNKEN | NOT WS_GROUP
+    LTEXT           "窗口句柄:",IDC_LBL_TEST_HANDLE,36,34,44,10
+    EDITTEXT        IDC_EDIT_TEST_HANDLE,84,32,90,13,ES_AUTOHSCROLL
+    PUSHBUTTON      "检测",IDC_BTN_TEST_DETECT,184,30,64,18
+    LTEXT           "置信度:",IDC_LBL_TEST_CONF,378,34,38,10
+    EDITTEXT        IDC_EDIT_TEST_CONF,420,32,42,13
+    LTEXT           "IOU:",IDC_LBL_TEST_IOU,470,34,24,10
+    EDITTEXT        IDC_EDIT_TEST_IOU,498,32,42,13
+    RTEXT           "自适应",IDC_STATIC_TEST_ZOOM,740,34,44,10
+    LTEXT           "",IDC_PREVIEW_TEST,8,54,776,350,SS_NOTIFY | SS_SUNKEN | NOT WS_GROUP
+    LTEXT           "就绪",IDC_STATIC_TEST_STATUS,8,410,776,10
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,0
+ PRODUCTVERSION 1,0,0,0
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404B0"
+        BEGIN
+            VALUE "CompanyName", "lwsoft"
+            VALUE "FileDescription", "YOLO 综合工具"
+            VALUE "FileVersion", "1.0.0.0"
+            VALUE "InternalName", "YOLO_Tool.exe"
+            VALUE "OriginalFilename", "YOLO_Tool.exe"
+            VALUE "ProductName", "YOLO 综合工具"
+            VALUE "ProductVersion", "1.0.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+    IDD_YOLO_TOOL_DIALOG, DIALOG
+    BEGIN
+        RIGHTMARGIN, 600
+        BOTTOMMARGIN, 420
+    END
+
+    IDD_PAGE_CAPTURE, DIALOG
+    BEGIN
+        RIGHTMARGIN, 797
+        BOTTOMMARGIN, 321
+    END
+
+    IDD_PAGE_ANNOTATE, DIALOG
+    BEGIN
+        RIGHTMARGIN, 605
+        BOTTOMMARGIN, 321
+    END
+
+    IDD_PAGE_TRAIN, DIALOG
+    BEGIN
+        RIGHTMARGIN, 494
+    END
+
+    IDD_PAGE_TEST, DIALOG
+    BEGIN
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// AFX_DIALOG_LAYOUT
+//
+
+IDD_YOLO_TOOL_DIALOG AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_PAGE_CAPTURE AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_PAGE_ANNOTATE AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_PAGE_TRAIN AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+#endif    // 中文(简体，中国) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+

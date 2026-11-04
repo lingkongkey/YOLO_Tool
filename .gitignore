@@ -1,0 +1,30 @@
+# Visual Studio 用户状态与中间文件
+.vs/
+ipch/
+*.aps
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+
+# 编译输出目录
+x64/
+Debug/
+Release/
+
+# 编译产物
+*.obj
+*.pdb
+*.ilk
+*.iobj
+*.ipdb
+*.tlog
+*.log
+*.recipe
+*.exe
+*.dll
+*.lib
+*.exp
+*.res

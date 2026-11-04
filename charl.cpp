@@ -1,0 +1,10 @@
+#include "pch.h"
+#include "windows.h"
+
+const WCHAR* g_yema[] =
+{
+	L"½ØÍ¼",
+	L"±ê×¢",
+	L"ÑµÁ·",
+	L"²âÊÔ"
+};

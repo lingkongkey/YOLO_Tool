@@ -1,0 +1,116 @@
+//{{NO_DEPENDENCIES}}
+// Microsoft Visual C++ ���ɵİ����ļ���
+// �� YOLO_Tool.rc ʹ��
+//
+#define IDD_YOLO_TOOL_DIALOG            102
+#define IDR_MAINFRAME                   128
+#define IDD_PAGE_CAPTURE                200
+#define IDD_PAGE_ANNOTATE               201
+#define IDD_PAGE_TRAIN                  202
+#define IDD_PAGE_TEST                   203
+#define IDC_EDIT_HANDLE                 1000
+#define IDC_BTN_CHECK                   1001
+#define IDC_FINDER                      1002
+#define IDC_EDIT_TITLE                  1003
+#define IDC_CHK_CLIENT                  1004
+#define IDC_EDIT_INTERVAL               1005
+#define IDC_SPIN_INTERVAL               1006
+#define IDC_EDIT_SAVE_DIR               1007
+#define IDC_BTN_BROWSE                  1008
+#define IDC_BTN_AUTO                    1009
+#define IDC_BTN_MANUAL                  1010
+#define IDC_STATIC_STATUS               1011
+#define IDC_PREVIEW                     1012
+#define IDC_TAB                         1100
+#define IDC_EDIT_CLASSES                1101
+#define IDC_BTN_SAVE_CLASSES            1102
+#define IDC_COMBO_WEIGHTS_ANN           1103
+#define IDC_EDIT_CONF                   1104
+#define IDC_BTN_ANNOTATE                1105
+#define IDC_BTN_LABELIMG                1106
+#define IDC_EDIT_LOG_ANN                1107
+#define IDC_STATIC_ANN_STATUS           1108
+#define IDC_COMBO_WEIGHTS_TRAIN         1109
+#define IDC_EDIT_EPOCHS                 1110
+#define IDC_EDIT_IMGSZ                  1111
+#define IDC_EDIT_BATCH                  1112
+#define IDC_BTN_TRAIN_START             1113
+#define IDC_BTN_TRAIN_STOP              1114
+#define IDC_EDIT_LOG_TRAIN              1115
+#define IDC_STATIC_TRAIN_STATUS         1116
+#define IDC_GRP_TARGET                  1117
+#define IDC_LBL_HANDLE                  1118
+#define IDC_LBL_FINDER_TIP              1119
+#define IDC_LBL_TITLE                   1120
+#define IDC_GRP_SNAP                    1121
+#define IDC_LBL_INTERVAL                1122
+#define IDC_LBL_INTERVAL_HINT           1123
+#define IDC_LBL_SAVE_DIR                1124
+#define IDC_GRP_PREVIEW                 1125
+#define IDC_GRP_CLASSES                 1126
+#define IDC_GRP_ANNOTATE                1127
+#define IDC_LBL_WEIGHTS_ANN             1128
+#define IDC_LBL_CONF                    1129
+#define IDC_GRP_LOG_ANN                 1130
+#define IDC_GRP_TRAIN_PARAMS            1131
+#define IDC_LBL_WEIGHTS_TRAIN           1132
+#define IDC_LBL_EPOCHS                  1133
+#define IDC_LBL_IMGSZ                   1134
+#define IDC_LBL_BATCH                   1135
+#define IDC_GRP_LOG_TRAIN               1136
+#define IDC_LIST_IMAGES                 1137
+#define IDC_BTN_PREV                    1138
+#define IDC_BTN_NEXT                    1139
+#define IDC_BTN_REFRESH                 1140
+#define IDC_BTN_ZOOM_IN                 1141
+#define IDC_BTN_ZOOM_OUT                1142
+#define IDC_BTN_ZOOM_FIT                1143
+#define IDC_BTN_SAVE_LABELS             1144
+#define IDC_BTN_DEL_BOX                 1145
+#define IDC_LBL_CLASS_CURRENT           1146
+#define IDC_COMBO_CLASSES               1147
+#define IDC_ANNO_CANVAS                 1148
+#define IDC_GRP_IMAGES                  1149
+#define IDC_BTN_EXPORT                  1150
+#define IDC_CHK_RESUME                  1152
+#define IDC_CHK_GPU                     1153
+#define IDC_COMBO_EXPORT_FMT            1154
+#define IDC_LBL_EXPORT_FMT              1155
+#define IDC_LIST_CAPTURES               1151
+#define IDC_LBL_TEST_MODEL              1160
+#define IDC_COMBO_TEST_MODEL            1161
+#define IDC_LBL_TEST_IMGSZ              1162
+#define IDC_EDIT_TEST_IMGSZ             1163
+#define IDC_BTN_TEST_OPEN               1164
+#define IDC_BTN_TEST_REFRESH            1165
+#define IDC_FINDER_TEST                 1168
+#define IDC_LBL_TEST_HANDLE             1169
+#define IDC_EDIT_TEST_HANDLE            1170
+#define IDC_LBL_TEST_MODE               1172
+#define IDC_RADIO_TEST_SINGLE           1173
+#define IDC_RADIO_TEST_CONT             1174
+#define IDC_BTN_TEST_DETECT             1175
+#define IDC_LBL_TEST_CONF               1176
+#define IDC_EDIT_TEST_CONF              1177
+#define IDC_LBL_TEST_IOU                1178
+#define IDC_EDIT_TEST_IOU               1179
+#define IDC_STATIC_TEST_ZOOM            1180
+#define IDC_PREVIEW_TEST                1181
+#define IDC_STATIC_TEST_STATUS          1182
+#define IDC_LBL_AI_KEY                  1156
+#define IDC_EDIT_AI_KEY                 1157
+#define IDC_BTN_AI_ANNOTATE             1158
+#define IDC_COMBO_AI_PROVIDER           1159
+#define IDC_LBL_AI_MODEL                1183
+#define IDC_EDIT_AI_MODEL               1184
+
+// Next default values for new objects
+// 
+#ifdef APSTUDIO_INVOKED
+#ifndef APSTUDIO_READONLY_SYMBOLS
+#define _APS_NEXT_RESOURCE_VALUE        203
+#define _APS_NEXT_COMMAND_VALUE         32771
+#define _APS_NEXT_CONTROL_VALUE         1186
+#define _APS_NEXT_SYMED_VALUE           101
+#endif
+#endif

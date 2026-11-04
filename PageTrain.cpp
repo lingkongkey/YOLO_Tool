@@ -1,0 +1,808 @@
+﻿// PageTrain.cpp
+
+#include "pch.h"
+#include "framework.h"
+#include "YOLO_Tool.h"
+#include "PageTrain.h"
+#include "GreenEnv.h"
+#include "UiUtil.h"
+#include "AppConfig.h"
+#include "afxdialogex.h"
+#include <shlwapi.h>
+#pragma comment(lib, "shlwapi.lib")
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+CPageTrain::CPageTrain(CWnd* pParent /*=nullptr*/)
+	: CDialogEx(IDD_PAGE_TRAIN, pParent)
+	
+	, m_bExporting(false)
+{
+}
+
+BEGIN_MESSAGE_MAP(CPageTrain, CDialogEx)
+	ON_WM_SIZE()
+	ON_WM_DESTROY()
+	ON_WM_SHOWWINDOW()
+	ON_BN_CLICKED(IDC_BTN_TRAIN_START, &CPageTrain::OnBnClickedBtnTrainStart)
+	ON_BN_CLICKED(IDC_BTN_TRAIN_STOP, &CPageTrain::OnBnClickedBtnTrainStop)
+	ON_BN_CLICKED(IDC_BTN_EXPORT, &CPageTrain::OnBnClickedBtnExport)
+	ON_MESSAGE(WM_USER_RECVLOG, &CPageTrain::OnRecvLog)
+	ON_MESSAGE(WM_USER_PROC_EXIT, &CPageTrain::OnProcExit)
+	ON_WM_HELPINFO()
+END_MESSAGE_MAP()
+
+void CPageTrain::DoDataExchange(CDataExchange* pDX)
+{
+	CDialogEx::DoDataExchange(pDX);
+	DDX_Control(pDX, IDC_EDIT_LOG_TRAIN, m_richLog);
+}
+
+BOOL CPageTrain::OnInitDialog()
+{
+	CDialogEx::OnInitDialog();
+
+	CAppConfig& cfg = CAppConfig::Instance();
+
+	FillWeightsCombo();
+	FillExportFormats();
+
+	RefreshEpochsDefault();
+	if (!cfg.strTrainEpochs.IsEmpty())
+		SetDlgItemText(IDC_EDIT_EPOCHS, cfg.strTrainEpochs);
+
+	SetDlgItemText(IDC_EDIT_IMGSZ, cfg.strTrainImgsz.IsEmpty() ? _T("640") : cfg.strTrainImgsz);
+	SetDlgItemText(IDC_EDIT_BATCH, cfg.strTrainBatch.IsEmpty() ? _T("4") : cfg.strTrainBatch);
+
+	GetDlgItem(IDC_BTN_TRAIN_STOP)->EnableWindow(FALSE);
+
+		if (GetGreenGpuRoot().IsEmpty())
+	{
+		GetDlgItem(IDC_CHK_GPU)->EnableWindow(FALSE);
+		CheckDlgButton(IDC_CHK_GPU, BST_UNCHECKED);
+	}
+	else
+	{
+		CheckDlgButton(IDC_CHK_GPU, cfg.bTrainGpu ? BST_CHECKED : BST_UNCHECKED);
+	}
+
+		if (!cfg.strTrainWeights.IsEmpty())
+	{
+		CComboBox* pW = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_TRAIN);
+		if (pW != NULL)
+		{
+			for (INT_PTR i = 0; i < pW->GetCount(); i++)
+			{
+				CString strItem;
+				pW->GetLBText(i, strItem);
+				if (strItem.Find(cfg.strTrainWeights) >= 0 || cfg.strTrainWeights.Find(strItem) >= 0)
+				{
+					pW->SetCurSel((int)i);
+					break;
+				}
+			}
+		}
+	}
+
+
+	if (!cfg.strTrainExportFormat.IsEmpty())
+	{
+		CComboBox* pE = (CComboBox*)GetDlgItem(IDC_COMBO_EXPORT_FMT);
+		if (pE != NULL)
+		{
+			for (INT_PTR i = 0; i < pE->GetCount(); i++)
+			{
+				CString strItem;
+				pE->GetLBText(i, strItem);
+				if (strItem.CompareNoCase(cfg.strTrainExportFormat) == 0)
+				{
+					pE->SetCurSel((int)i);
+					break;
+				}
+			}
+		}
+	}
+
+	SetStatus(_T("灏辩华"));
+	Layout();
+
+	CEdit* pEditLog = (CEdit*)GetDlgItem(IDC_EDIT_LOG_TRAIN);
+	if (pEditLog == nullptr )
+	{
+		m_Maxline = 0;
+		return TRUE;
+	}
+
+	CRect rcClient;
+	pEditLog->GetClientRect(&rcClient);
+	CDC* pDC = pEditLog->GetDC();
+
+
+	CFont* pOldFont = pDC->SelectObject(pEditLog->GetFont());
+
+	TEXTMETRIC tm = { 0 };
+	pDC->GetTextMetrics(&tm);
+	int nLineHeight = tm.tmHeight + tm.tmExternalLeading;
+
+	pDC->SelectObject(pOldFont);
+	pEditLog->ReleaseDC(pDC);
+
+	if (nLineHeight <= 0)
+	{
+		m_Maxline = 0;
+		return TRUE;
+	}
+
+	m_Maxline = rcClient.Height() / nLineHeight;
+
+	return TRUE;
+}
+
+
+BOOL CPageTrain::PreTranslateMessage(MSG* pMsg)
+{
+
+	if (UiForwardEditPaste(pMsg))
+		return TRUE;
+
+	if (UiSwallowDialogKey(pMsg))
+		return TRUE;
+	return CDialogEx::PreTranslateMessage(pMsg);
+}
+
+void CPageTrain::OnOK()
+{
+}
+
+
+void CPageTrain::OnCancel()
+{
+}
+
+void CPageTrain::OnSize(UINT nType, int cx, int cy)
+{
+	CDialogEx::OnSize(nType, cx, cy);
+	Layout();
+
+	CEdit* pEditLog = (CEdit*)GetDlgItem(IDC_EDIT_LOG_TRAIN);
+	if (pEditLog == nullptr || !pEditLog->IsWindowVisible())
+	{
+		return;
+	}
+
+	CRect rcClient;
+	pEditLog->GetClientRect(&rcClient);
+	int nClientHeight = rcClient.Height();
+	if (nClientHeight <= 0)
+	{
+		m_Maxline = 0;
+		return;
+	}
+
+	CDC* pDC = pEditLog->GetDC();
+	if (pDC == nullptr)
+	{
+		m_Maxline = 0;
+		return;
+	}
+
+	CFont* pOldFont = pDC->SelectObject(pEditLog->GetFont());
+
+	TEXTMETRIC tm = { 0 };
+	pDC->GetTextMetrics(&tm);
+	int nLineHeight = tm.tmHeight + tm.tmExternalLeading;
+
+	pDC->SelectObject(pOldFont);
+	pEditLog->ReleaseDC(pDC);
+
+	if (nLineHeight <= 0)
+	{
+		m_Maxline = 0;
+		return;
+	}
+
+	m_Maxline = nClientHeight / nLineHeight;
+}
+
+
+void CPageTrain::Layout()
+{
+	CRect rcClient;
+	GetClientRect(&rcClient);
+	int W = rcClient.Width();
+	int H = rcClient.Height();
+	if (W < 100 || H < 100)
+		return;
+
+	int dpi = UiDpi(m_hWnd);
+	auto mv = [&](UINT nID, int x, int y, int w, int h)
+	{
+		CWnd* pWnd = GetDlgItem(nID);
+		if (pWnd != NULL)
+			pWnd->MoveWindow(::MulDiv(x, dpi, 96), ::MulDiv(y, dpi, 96),
+				max(1, ::MulDiv(w, dpi, 96)), max(1, ::MulDiv(h, dpi, 96)));
+	};
+
+	const int M = 8, GAP = 8, RIGHTW = 240, BARH = 22;
+
+	
+	int rightX = W - M - RIGHTW;  
+	int colH = H - M * 2;        
+
+	int logW = rightX - GAP - M;
+	if (logW < 200)
+		logW = 200;
+
+	mv(IDC_GRP_LOG_TRAIN, M, M, logW, colH - 20);
+	mv(IDC_EDIT_LOG_TRAIN, M + 8, M + 20, logW - 16, colH - 48);
+
+	mv(IDC_GRP_TRAIN_PARAMS, rightX, M, RIGHTW, colH);
+	mv(IDC_LBL_WEIGHTS_TRAIN, rightX + 10, M + 26, 44, 14);
+	mv(IDC_COMBO_WEIGHTS_TRAIN, rightX + 10, M + 44, RIGHTW - 20, 160);
+	mv(IDC_LBL_EPOCHS, rightX + 10, M + 80, 56, 14);
+	mv(IDC_EDIT_EPOCHS, rightX + 70, M + 78, 64, 21);
+	mv(IDC_LBL_IMGSZ, rightX + 10, M + 110, 56, 14);
+	mv(IDC_EDIT_IMGSZ, rightX + 70, M + 108, 64, 21);
+	mv(IDC_LBL_BATCH, rightX + 10, M + 140, 56, 14);
+	mv(IDC_EDIT_BATCH, rightX + 70, M + 138, 64, 21);
+	mv(IDC_CHK_RESUME, rightX + 10, M + 168, RIGHTW - 20, 18);
+	mv(IDC_CHK_GPU, rightX + 10, M + 192, RIGHTW - 20, 18);
+
+	mv(IDC_LBL_EXPORT_FMT, rightX + 10, M + 268, RIGHTW - 20, 18);
+	mv(IDC_COMBO_EXPORT_FMT, rightX + 10, M + 292, RIGHTW - 54, 25);
+	mv(IDC_BTN_EXPORT, rightX + 10, M + 322, RIGHTW - 180, 30);
+	int btnW = (RIGHTW - 28) / 2;
+	int btnY = M + colH - 8 - 30;
+
+	mv(IDC_BTN_TRAIN_START, rightX + 10, btnY, btnW, 28);
+	mv(IDC_BTN_TRAIN_STOP, rightX + 18 + btnW, btnY, btnW, 28);
+}
+
+
+int CPageTrain::CountTrainImages()
+{
+	CString strDir = GetProjectImagesDir();
+	if (strDir.IsEmpty() || !::PathIsDirectory(strDir))
+		return 0;
+
+	int nCount = 0;
+	const TCHAR* szExts[] = { _T("*.jpg"), _T("*.jpeg"), _T("*.png"), _T("*.bmp") };
+	for (int k = 0; k < 4; k++)
+	{
+		CFileFind finder;
+		BOOL bMore = finder.FindFile(strDir + _T("\\") + szExts[k]);
+		while (bMore)
+		{
+			bMore = finder.FindNextFile();
+			if (!finder.IsDirectory())
+				nCount++;
+		}
+		finder.Close();
+	}
+	return nCount;
+}
+
+
+void CPageTrain::RefreshEpochsDefault()
+{
+	int nCount = CountTrainImages();
+	if (nCount <= 0)
+		nCount = 50;
+
+	CString strCur;
+	GetDlgItemText(IDC_EDIT_EPOCHS, strCur);
+	strCur.Trim();
+
+	CString strLast;
+	strLast.Format(_T("%d"), m_nLastEpochsDefault);
+	if (!strCur.IsEmpty() && strCur != strLast)
+		return;
+	CString strNew;
+
+}
+
+
+void CPageTrain::OnShowWindow(BOOL bShow, UINT nStatus)
+{
+	CDialogEx::OnShowWindow(bShow, nStatus);
+	if (bShow)
+		RefreshEpochsDefault();
+}
+
+void CPageTrain::FillWeightsCombo()
+{
+	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_TRAIN);
+	if (pCombo == nullptr)
+		return;
+
+	pCombo->ResetContent(); 
+
+	CStringArray arrDirs;
+	{
+		CString strProj = GetProjectModelsDir();
+		if (!strProj.IsEmpty())
+			arrDirs.Add(strProj);
+		CString strGreen = GetGreenRoot();
+		if (!strGreen.IsEmpty())
+			arrDirs.Add(strGreen + _T("\\models"));
+	}
+
+
+	for (INT_PTR d = 0; d < arrDirs.GetSize(); d++)
+	{
+		CFileFind finder;
+		BOOL bMore = finder.FindFile(arrDirs[d] + _T("\\*.pt"));
+		while (bMore)
+		{
+			if (!finder.IsDirectory())
+			{
+				CString strName = finder.GetFileName();
+				if (pCombo->FindStringExact(-1, strName) < 0)
+				{
+					pCombo->AddString(strName);
+				}
+			}
+			bMore = finder.FindNextFile();
+		}
+		finder.Close();
+	}
+
+
+	CString strRuns = GetProjectRunsDir();
+	if (!strRuns.IsEmpty())
+	{
+		CFileFind fRun;
+		BOOL bRun = fRun.FindFile(strRuns + _T("\\*"));
+		while (bRun)
+		{
+			if (!fRun.IsDirectory() || fRun.IsDots())
+			{
+				bRun = fRun.FindNextFile();
+				continue;
+			}
+			CString strWeights = fRun.GetFilePath() + _T("\\weights");
+			if (!::PathIsDirectory(strWeights))
+			{
+				bRun = fRun.FindNextFile();
+				continue;
+			}
+
+			CFileFind fW;
+			BOOL bW = fW.FindFile(strWeights + _T("\\*.pt"));
+			while (bW)
+			{
+				if (!fW.IsDirectory())
+				{
+					CString strRunName = fRun.GetFileName();
+					CString strDisp = strRunName + _T("/") + fW.GetFileName();
+					if (pCombo->FindStringExact(-1, strDisp) < 0)
+					{
+						pCombo->AddString(strDisp);
+					}
+				}
+				bW = fW.FindNextFile();
+			}
+			fW.Close();
+			bRun = fRun.FindNextFile();
+		}
+		fRun.Close();
+	}
+
+
+	if (pCombo->GetCount() == 0)
+	{
+		pCombo->AddString(_T("yolo11n.pt"));
+		pCombo->AddString(_T("yolo11s.pt"));
+		pCombo->AddString(_T("yolov8n.pt"));
+		pCombo->AddString(_T("yolov8s.pt"));
+	}
+
+	
+	int nSel = pCombo->FindStringExact(-1, _T("yolo11n.pt"));
+	pCombo->SetCurSel(nSel >= 0 ? nSel : 0);
+}
+
+
+void CPageTrain::FillExportFormats()
+{
+	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_EXPORT_FMT);
+	if (pCombo == NULL)
+		return;
+	pCombo->ResetContent();
+	// Display format: "actual_value - Description"; parse before ' - ' to get --format value
+	pCombo->AddString(_T("ncnn - ncnn inference engine (C++)"));
+	pCombo->AddString(_T("onnx - ONNX / OpenCV DNN"));
+	pCombo->AddString(_T("torchscript - PyTorch JIT"));
+	pCombo->AddString(_T("engine - TensorRT"));
+	pCombo->AddString(_T("tflite - TensorFlow Lite"));
+	pCombo->AddString(_T("openvino - Intel OpenVINO"));
+	pCombo->AddString(_T("pb - TensorFlow Graph"));
+	pCombo->SetCurSel(0);
+}
+
+void CPageTrain::OnBnClickedBtnTrainStart()
+{
+	Invalidate();
+	UpdateWindow();
+
+	bool bGpu = (IsDlgButtonChecked(IDC_CHK_GPU) == BST_CHECKED);
+	CString strGreen = bGpu ? GetGreenGpuRoot() : GetGreenRoot();
+	CString strPython = bGpu ? GetGreenGpuPython() : GetGreenPython();
+	if (strGreen.IsEmpty() || strPython.IsEmpty())
+	{
+		if (bGpu)
+			AfxMessageBox(_T("YOLO_Green_GPU standalone package or python.exe not found.\nPlease ensure YOLO_Green_GPU and YOLO_Green are placed side by side."), MB_ICONWARNING);
+		else
+			AfxMessageBox(_T("YOLO_Green package or python.exe not found."), MB_ICONWARNING);
+		return;
+	}
+
+	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_TRAIN);
+	CString strWeights;
+	int nSel = pCombo->GetCurSel();
+	if (nSel >= 0)
+		pCombo->GetLBText(nSel, strWeights);
+	if (strWeights.IsEmpty())
+	{
+		AfxMessageBox(_T("Please select a training weight file."), MB_ICONWARNING);
+		return;
+	}
+
+	CString strEpochs, strImgsz, strBatch;
+	GetDlgItemText(IDC_EDIT_EPOCHS, strEpochs);
+	GetDlgItemText(IDC_EDIT_IMGSZ, strImgsz);
+	GetDlgItemText(IDC_EDIT_BATCH, strBatch);
+	strEpochs.Trim(); strImgsz.Trim(); strBatch.Trim();
+	if (_ttoi(strEpochs) <= 0) strEpochs = _T("100");
+	if (_ttoi(strImgsz) <= 0) strImgsz = _T("640");
+	if (_ttoi(strBatch) <= 0) strBatch = _T("4");
+	CString strData = GetProjectDataYaml();
+	if (strData.IsEmpty() || !::PathFileExists(strData))
+	{
+		AfxMessageBox(_T("data.yaml not found. Please select project root on Capture page first (auto-creates dataset\\data.yaml)."), MB_ICONWARNING);
+		return;
+	}
+
+	// Weights: dropdown shows file names (e.g. yolo11n.pt or train-3/best.pt)
+	CString strWeightsPath = strWeights;
+	int nSlash = strWeights.Find(_T('/'));
+	if (nSlash >= 0)
+	{
+		// Training output weight: train-3/best.pt -> <runs>/train-3/weights/best.pt
+		CString strRunName = strWeights.Left(nSlash);
+		CString strFileName = strWeights.Mid(nSlash + 1);
+		strWeightsPath = GetProjectRunsDir() + _T("\\") + strRunName + _T("\\weights\\") + strFileName;
+	}
+	else if (strWeights.Find(_T('\\')) < 0)
+	{
+		CString strProjW = GetProjectModelsDir() + _T("\\") + strWeights;
+		if (::PathFileExists(strProjW))
+			strWeightsPath = strProjW;
+		else
+			strWeightsPath = strGreen + _T("\\models\\") + strWeights;
+	}
+
+	bool bResume = (IsDlgButtonChecked(IDC_CHK_RESUME) == BST_CHECKED);
+	bool bIsLastPt = (strWeights.Find(_T("last.pt")) >= 0);
+
+	CString strRuns = GetProjectRunsDir();
+	if (strRuns.IsEmpty())
+	{
+		AfxMessageBox(_T("Training output dir not found. Please select project root on Capture page first."), MB_ICONWARNING);
+		return;
+	}
+
+	m_strBestPath.Empty();
+
+	CString strScript = strGreen + _T("\\scripts\\train.py");
+	if (!::PathFileExists(strScript))
+	{
+		AfxMessageBox(_T("scripts\train.py not found. Please check green package integrity."), MB_ICONWARNING);
+		return;
+	}
+
+	CString strCmd;
+
+	LPCTSTR pszDevice = bGpu ? _T("0") : _T("cpu");
+	strCmd.Format(
+		_T("\"%s\" -X utf8 -u \"%s\" --data \"%s\" --weights \"%s\" --epochs %s --imgsz %s --batch %s --device %s --project \"%s\" --name train"),
+		(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strData, (LPCTSTR)strWeightsPath,
+		(LPCTSTR)strEpochs, (LPCTSTR)strImgsz, (LPCTSTR)strBatch, pszDevice, (LPCTSTR)strRuns);
+
+
+	if (bResume && bIsLastPt)
+		strCmd += _T(" --resume");
+
+	CString strLog;
+	LPCTSTR pszDevName = bGpu ? _T("GPU") : _T("CPU");
+	if (bResume)
+		strLog.Format(_T("==== 缁寮€濮嬶紙%s锛屼粠 %s锛?===\r\n%s\r\n"), pszDevName, (LPCTSTR)strWeights, (LPCTSTR)strCmd);
+	else
+		strLog.Format(_T("==== 寮€濮嬭缁冿紙%s锛?===\r\n%s\r\n"), pszDevName, (LPCTSTR)strCmd);
+	AppendLog(strLog);
+
+	m_bExporting = false;
+	if (!m_capture.StartProcess(strCmd, GetSafeHwnd()))
+	{
+		AppendLog(_T("鍒涘缓璁粌杩涚▼澶辫触銆俓r\n"));
+		SetStatus(_T("璁粌鍚姩澶辫触"));
+		return;
+	}
+	SetRunning(true);
+	SetStatus(_T("璁粌涓?.."));
+}
+
+void CPageTrain::OnBnClickedBtnTrainStop()
+{
+	if (!m_capture.IsRunning())
+		return;
+
+	AppendLog(_T("==== 姝ｅ湪鍋滄锛岃绋嶅€?====\r\n"));
+	SetStatus(_T("姝ｅ湪鍋滄..."));
+	m_capture.Stop();   
+	SetRunning(false);
+	SetStatus(_T("Stopped"));
+}
+
+void CPageTrain::OnBnClickedBtnExport()
+{
+	StartExport();
+}
+
+CString CPageTrain::GetBestWeightPath()
+{
+	return ::GetBestWeightPath();
+}
+
+	
+void CPageTrain::StartExport()
+{
+	if (m_bExporting)
+	{
+		AppendLog(_T("正在导出，请等待完成...\r\n"));
+		return;
+	}
+
+	bool bUseGpu = !GetGreenGpuRoot().IsEmpty();
+	CString strGreen = bUseGpu ? GetGreenGpuRoot() : GetGreenRoot();
+	CString strPython = bUseGpu ? GetGreenGpuPython() : GetGreenPython();
+
+	if (strGreen.IsEmpty() || strPython.IsEmpty())
+	{
+		AfxMessageBox(_T("python.exe not found in YOLO_Green or YOLO_Green_GPU package."), MB_ICONWARNING);
+		return;
+	}
+
+	CString strBest = GetBestWeightPath();
+	if (!::PathFileExists(strBest))
+	{
+		AppendLog(_T("best.pt not found, please train first\r\n"));
+		SetStatus(_T("best.pt not found, please train first"));
+		return;
+	}
+
+	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_EXPORT_FMT);
+	if (pCombo == nullptr)
+	{
+		AppendLog(_T("导出格式下拉框控件获取失败\r\n"));
+		return;
+	}
+	int nSel = pCombo->GetCurSel();
+	if (nSel == CB_ERR)
+	{
+		AfxMessageBox(_T("请先选择导出格式！"), MB_ICONWARNING);
+		return;
+	}
+
+	CString strFmtDisp;
+	pCombo->GetLBText(nSel, strFmtDisp);
+	int nDash = strFmtDisp.Find(_T(" - "));
+	CString strFormat = (nDash > 0) ? strFmtDisp.Left(nDash) : strFmtDisp;
+	strFormat.Trim();
+	if (strFormat.IsEmpty())
+	{
+		AppendLog(_T("导出格式解析失败\r\n"));
+		return;
+	}
+
+	CString strImgsz;
+	GetDlgItemText(IDC_EDIT_IMGSZ, strImgsz);
+	strImgsz.Trim();
+	if (_ttoi(strImgsz) <= 0)
+		strImgsz = _T("640");
+
+	CString strScript = strGreen + _T("\\scripts\\export_model.py");
+	if (!::PathFileExists(strScript))
+	{
+		AfxMessageBox(_T("scripts\\export_model.py not found. Please check green package integrity."), MB_ICONWARNING);
+		return;
+	}
+
+	CString strCmd;
+	strCmd.Format(
+		_T("\"%s\" -X utf8 -u \"%s\" --weights \"%s\" --format %s --imgsz %s"),
+		(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strBest, (LPCTSTR)strFormat, (LPCTSTR)strImgsz);
+
+	CString strLog;
+	strLog.Format(_T("==== 开始导出 %s ====\r\n%s\r\n"), (LPCTSTR)strFormat, (LPCTSTR)strCmd);
+	AppendLog(strLog);
+
+	m_bExporting = true;
+	if (!m_capture.StartProcess(strCmd, GetSafeHwnd()))
+	{
+		m_bExporting = false;
+		AppendLog(_T("创建导出进程失败。\r\n"));
+		SetStatus(_T("导出启动失败"));
+		return;
+	}
+	SetRunning(true);
+	SetStatus(_T("导出中..."));
+}
+
+
+void CPageTrain::OnDestroy()
+{
+	m_capture.Stop();
+	CAppConfig& cfg = CAppConfig::Instance();
+	GetDlgItemText(IDC_EDIT_EPOCHS, cfg.strTrainEpochs);
+	GetDlgItemText(IDC_EDIT_IMGSZ, cfg.strTrainImgsz);
+	GetDlgItemText(IDC_EDIT_BATCH, cfg.strTrainBatch);
+	cfg.bTrainGpu = (IsDlgButtonChecked(IDC_CHK_GPU) == BST_CHECKED);
+
+	CComboBox* pW = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_TRAIN);
+	if (pW != NULL)
+	{
+		CString strWeight;
+		pW->GetWindowText(strWeight);
+		cfg.strTrainWeights = strWeight;
+	}
+
+	CComboBox* pE = (CComboBox*)GetDlgItem(IDC_COMBO_EXPORT_FMT);
+	if (pE != NULL)
+	{
+		CString strFmt;
+		pE->GetWindowText(strFmt);
+		cfg.strTrainExportFormat = strFmt;
+	}
+
+	CDialogEx::OnDestroy();
+}
+
+void CPageTrain::AppendLog(const CString& strText)
+{
+	CEdit* pEdit = (CEdit*)GetDlgItem(IDC_EDIT_LOG_TRAIN);
+	if (pEdit == NULL)
+		return;
+
+	CStringW line = strText;
+
+	
+	if (m_line >= m_Maxline )
+	{
+		m_richLog.SetWindowText(L"");
+
+		m_line = 0;
+		return ;
+	}
+
+	m_line += 1;
+	long endPos = m_richLog.GetTextLength();
+	m_richLog.SetSel(endPos, endPos);
+	m_richLog.ReplaceSel(line);
+	m_richLog.LineScroll(m_richLog.GetLineCount() - 1);
+}
+
+void CPageTrain::SetStatus(LPCTSTR lpszText)
+{
+	SetDlgItemText(IDC_STATIC_TRAIN_STATUS, lpszText);
+}
+
+void CPageTrain::SetRunning(bool bRunning)
+{
+	GetDlgItem(IDC_BTN_TRAIN_START)->EnableWindow(bRunning ? FALSE : TRUE);
+	GetDlgItem(IDC_BTN_TRAIN_STOP)->EnableWindow(bRunning ? TRUE : FALSE);
+	GetDlgItem(IDC_BTN_EXPORT)->EnableWindow(bRunning ? FALSE : TRUE);
+	GetDlgItem(IDC_COMBO_EXPORT_FMT)->EnableWindow(bRunning ? FALSE : TRUE);
+	GetDlgItem(IDC_COMBO_WEIGHTS_TRAIN)->EnableWindow(bRunning ? FALSE : TRUE);
+	GetDlgItem(IDC_EDIT_EPOCHS)->EnableWindow(bRunning ? FALSE : TRUE);
+	GetDlgItem(IDC_EDIT_IMGSZ)->EnableWindow(bRunning ? FALSE : TRUE);
+	GetDlgItem(IDC_EDIT_BATCH)->EnableWindow(bRunning ? FALSE : TRUE);
+	GetDlgItem(IDC_CHK_RESUME)->EnableWindow(bRunning ? FALSE : TRUE);
+	GetDlgItem(IDC_CHK_GPU)->EnableWindow(!bRunning && !GetGreenGpuRoot().IsEmpty() ? TRUE : FALSE);
+}
+
+
+BOOL CPageTrain::OnHelpInfo(HELPINFO* pHelpInfo)
+{
+
+
+	return 1;
+}
+
+LRESULT CPageTrain::OnRecvLog(WPARAM wParam, LPARAM lParam)
+{
+	CStringW* pText = reinterpret_cast<CStringW*>(lParam);
+	if (!pText)
+		return 0;
+
+	CStringW line = *pText;
+	BOOL bStdErr = (wParam == 1);
+	delete pText;
+
+	CHARFORMAT2 cf;
+	cf.cbSize = sizeof(CHARFORMAT2);
+	cf.dwMask = CFM_COLOR;
+
+	if (bStdErr)
+	{
+		cf.crTextColor = RGB(220, 40, 40);
+	}
+	else if (line.Find(L"best weight found") != -1)
+	{
+		cf.crTextColor = RGB(0, 160, 0);
+	}
+	else
+	{
+		cf.crTextColor = RGB(0, 0, 0);
+	}
+
+	if (!m_richLog.GetSafeHwnd() || !m_richLog.IsWindowVisible())
+		return 0;
+
+	if (m_line >= m_Maxline)
+	{
+		m_richLog.SetWindowText(L"");
+		m_line = 0;
+	}
+
+	m_line += 1;
+	line += L"\r\n";
+
+	long endPos = m_richLog.GetTextLength();
+	m_richLog.SetSel(endPos, endPos);
+	m_richLog.SetSelectionCharFormat(cf);
+	m_richLog.ReplaceSel(line);
+
+	m_richLog.LineScroll(m_richLog.GetLineCount() - 1);
+
+	return 0;
+}
+
+
+LRESULT CPageTrain::OnProcExit(WPARAM wParam, LPARAM lParam)
+{
+	DWORD dwExit = (DWORD)wParam;
+	bool bExport = m_bExporting;
+	m_bExporting = false;
+
+	m_capture.Stop();
+	SetRunning(false);
+
+	CStringW tip;
+	if (bExport)
+		tip.Format(dwExit == 0 ? L"\r\n==== 瀵煎嚭瀹屾垚 ====\r\n"
+			: L"\r\n==== 瀵煎嚭缁撴潫锛岄€€鍑虹爜 %lu ====\r\n", dwExit);
+	else
+		tip.Format(dwExit == 0 ? L"\r\n==== 璁粌瀹屾垚 ====\r\n"
+			: L"\r\n==== 璁粌缁撴潫锛岄€€鍑虹爜 %lu ====\r\n", dwExit);
+
+	CHARFORMAT2W cf;
+	cf.cbSize = sizeof(CHARFORMAT2W);
+	cf.dwMask = CFM_COLOR;
+	cf.crTextColor = RGB(0, 128, 0);
+
+	long endPos = m_richLog.GetTextLength();
+	m_richLog.SetSel(endPos, endPos);
+	m_richLog.SetSelectionCharFormat(cf);
+	m_richLog.ReplaceSel(tip);
+	m_richLog.LineScroll(m_richLog.GetLineCount() - 1);
+
+	if (bExport)
+		SetStatus(dwExit == 0 ? _T("瀵煎嚭瀹屾垚") : _T("瀵煎嚭澶辫触"));
+	else
+		SetStatus(dwExit == 0 ? _T("璁粌瀹屾垚") : _T("璁粌澶辫触"));
+
+	return 0;
+}
