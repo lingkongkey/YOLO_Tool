@@ -5,7 +5,6 @@
 #include "afxdialogex.h"
 #include "FinderStatic.h"
 #include "PreviewStatic.h"
-#include "NcnnDetector.h"
 
 class CPageTest : public CDialogEx
 {
@@ -53,15 +52,6 @@ private:
 
 	void LoadResultImage();
 
-	
-	bool EnsureNcnnModel(const CString& strPt, CString& strParam, CString& strBin);
-	
-	bool LoadClassNames(const CString& strDataYaml, std::vector<std::string>& names);
-
-	
-	static bool CaptureWindowMat(HWND hwnd, bool bClientOnly, cv::Mat& outMat);
-
-	NcnnDetector    m_detector;        
 	CPreviewStatic  m_wndPreview;      
 	CFinderStatic   m_wndFinder;       
 	CStringArray    m_arrModels;       
@@ -69,7 +59,6 @@ private:
 	ULONGLONG       m_ullResultTime;   
 	bool            m_bRunning;        
 	bool            m_bInitializing;   
-	bool            m_bClientOnly;     
 	HWND            m_hwndTarget;      
 public:
 	afx_msg BOOL OnHelpInfo(HELPINFO* pHelpInfo);

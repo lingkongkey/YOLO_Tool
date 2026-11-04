@@ -66,9 +66,6 @@
     <ClInclude Include="PageTest.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="NcnnDetector.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="LogCapture.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -111,9 +108,6 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="PageTest.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="NcnnDetector.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="LogCapture.cpp">

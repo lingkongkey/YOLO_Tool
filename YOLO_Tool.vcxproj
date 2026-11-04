@@ -180,15 +180,13 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(ProjectDir)c++\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>gdiplus.lib;shlwapi.lib;ncnn.lib;opencv_world4140.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(ProjectDir)c++\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>gdiplus.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -219,7 +217,6 @@
     <ClInclude Include="PageTest.h" />
     <ClInclude Include="AnnotateCanvas.h" />
     <ClInclude Include="UiUtil.h" />
-    <ClInclude Include="NcnnDetector.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AppConfig.cpp" />
@@ -242,7 +239,6 @@
     <ClCompile Include="PageAnnotate.cpp" />
     <ClCompile Include="PageTrain.cpp" />
     <ClCompile Include="PageTest.cpp" />
-    <ClCompile Include="NcnnDetector.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="YOLO_Tool.rc" />

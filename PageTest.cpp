@@ -22,7 +22,6 @@ CPageTest::CPageTest(CWnd* pParent /*=nullptr*/)
 	, m_ullResultTime(0)
 	, m_bRunning(false)
 	, m_bInitializing(false)
-	, m_bClientOnly(false)
 	, m_hwndTarget(NULL)
 {
 }
@@ -368,191 +367,11 @@ HWND CPageTest::GetTargetHandle(bool bShowError)
 }
 
 
-bool CPageTest::EnsureNcnnModel(const CString& strPt, CString& strParam, CString& strBin)
-{
-	CString strDir;
-	{
-		CString strTmp = strPt;
-		LPTSTR p = strTmp.GetBuffer(_MAX_PATH);
-		::PathRemoveFileSpec(p);
-		strTmp.ReleaseBuffer();
-		strDir = strTmp;
-	}
-
-	CString strBase = ::PathFindFileName(strPt);
-	int nDot = strBase.ReverseFind(_T('.'));
-	if (nDot > 0)
-		strBase = strBase.Left(nDot);
-
-	CString strNcnnDir = strDir + _T("\\") + strBase + _T("_ncnn_model");
-	strParam = strNcnnDir + _T("\\model.ncnn.param");
-	strBin   = strNcnnDir + _T("\\model.ncnn.bin");
-
-	if (::PathFileExists(strParam) && ::PathFileExists(strBin))
-		return true;
-
-
-	CString strGreen = GetGreenRoot();
-	CString strPython = GetGreenPython();
-	CString strScript = strGreen + _T("\\scripts\\export_ncnn.py");
-	if (strGreen.IsEmpty() || !::PathFileExists(strPython) || !::PathFileExists(strScript))
-	{
-		AfxMessageBox(_T("未找到 ncnn 导出脚本（scripts\\export_ncnn.py），请先训练或手动导出。"), MB_ICONWARNING);
-		return false;
-	}
-
-	SetStatus(_T("正在导出 NCNN 模型（首次较慢，请稍候）..."));
-	AfxGetApp()->DoWaitCursor(1);
-
-	CString strCmd;
-	strCmd.Format(_T("\"%s\" \"%s\" --weights \"%s\""),
-		(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strPt);
-
-	STARTUPINFO si = { sizeof(si) };
-	si.dwFlags = STARTF_USESHOWWINDOW;
-	si.wShowWindow = SW_HIDE;
-	PROCESS_INFORMATION pi = { 0 };
-
-	
-	if (::CreateProcess(NULL, strCmd.GetBuffer(), NULL, NULL, FALSE,
-		CREATE_NO_WINDOW, NULL, strGreen, &si, &pi))
-	{
-		::WaitForSingleObject(pi.hProcess, INFINITE);
-		DWORD dwExit = 0;
-		::GetExitCodeProcess(pi.hProcess, &dwExit);
-		::CloseHandle(pi.hThread);
-		::CloseHandle(pi.hProcess);
-		if (dwExit != 0)
-		{
-			AfxGetApp()->DoWaitCursor(0);
-			AfxMessageBox(_T("NCNN 模型导出失败，请在控制台手动执行 export_ncnn.py 查看错误。"), MB_ICONWARNING);
-			return false;
-		}
-	}
-	else
-	{
-		AfxGetApp()->DoWaitCursor(0);
-		AfxMessageBox(_T("无法启动导出脚本。"), MB_ICONWARNING);
-		return false;
-	}
-
-	AfxGetApp()->DoWaitCursor(0);
-
-	return ::PathFileExists(strParam) && ::PathFileExists(strBin);
-}
-
-
-bool CPageTest::LoadClassNames(const CString& strDataYaml, std::vector<std::string>& names)
-{
-	names.clear();
-	if (strDataYaml.IsEmpty() || !::PathFileExists(strDataYaml))
-		return false;
-
-	CStringA strAnsi;
-	{
-		CFile f;
-		if (!f.Open(strDataYaml, CFile::modeRead | CFile::shareDenyNone))
-			return false;
-		ULONGLONG nLen = f.GetLength();
-		if (nLen == 0)
-		{
-			f.Close();
-			return false;
-		}
-		char* pBuf = new char[(UINT)nLen + 1];
-		f.Read(pBuf, (UINT)nLen);
-		pBuf[nLen] = 0;
-		strAnsi = pBuf;
-		delete[] pBuf;
-		f.Close();
-	}
-
-
-	int nPos = 0;
-	while (nPos < strAnsi.GetLength())
-	{
-		int nEnd = strAnsi.Find('\n', nPos);
-		CStringA strLine = (nEnd < 0) ? strAnsi.Mid(nPos) : strAnsi.Mid(nPos, nEnd - nPos);
-		strLine.Trim();
-		nPos = (nEnd < 0) ? strAnsi.GetLength() : nEnd + 1;
-
-		
-		int nColon = strLine.Find(':');
-		if (nColon <= 0)
-			continue;
-		CStringA strKey = strLine.Left(nColon);
-		strKey.Trim();
-		bool bDigit = !strKey.IsEmpty();
-		for (int i = 0; i < strKey.GetLength() && bDigit; i++)
-			if (strKey[i] < '0' || strKey[i] > '9') bDigit = false;
-		if (!bDigit)
-			continue;
-
-		CStringA strVal = strLine.Mid(nColon + 1);
-		strVal.Trim();
-		
-		if (strVal.GetLength() >= 2 && (strVal[0] == '"' || strVal[0] == '\''))
-			strVal = strVal.Mid(1, strVal.GetLength() - 2);
-		if (!strVal.IsEmpty())
-			names.push_back(LPCSTR(strVal));
-	}
-	return !names.empty();
-}
 
 
 
-bool CPageTest::CaptureWindowMat(HWND hwnd, bool bClientOnly, cv::Mat& outMat)
-{
-	if (hwnd == NULL || !::IsWindow(hwnd))
-		return false;
 
-	CRect rc;
-	if (bClientOnly)
-		::GetClientRect(hwnd, &rc);
-	else
-		::GetWindowRect(hwnd, &rc);
 
-	int w = rc.Width();
-	int h = rc.Height();
-	if (w < 4 || h < 4)
-		return false;
-
-	HDC hdcWin = bClientOnly ? ::GetDC(hwnd) : ::GetWindowDC(hwnd);
-	if (hdcWin == NULL)
-		return false;
-
-	HDC hdcMem = ::CreateCompatibleDC(hdcWin);
-	HBITMAP hBmp = ::CreateCompatibleBitmap(hdcWin, w, h);
-	HGDIOBJ hOld = ::SelectObject(hdcMem, hBmp);
-
-#ifndef PW_CLIENTONLY
-#define PW_CLIENTONLY 0x00000001
-#endif
-	UINT nFlags = bClientOnly ? PW_CLIENTONLY : 0;
-	if (!::PrintWindow(hwnd, hdcMem, nFlags))
-		::BitBlt(hdcMem, 0, 0, w, h, hdcWin, 0, 0, SRCCOPY);
-
-	::SelectObject(hdcMem, hOld);
-
-	BITMAPINFO bi = { 0 };
-	bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-	bi.bmiHeader.biWidth = w;
-	bi.bmiHeader.biHeight = -h;
-	bi.bmiHeader.biPlanes = 1;
-	bi.bmiHeader.biBitCount = 32;
-	bi.bmiHeader.biCompression = BI_RGB;
-
-	outMat.create(h, w, CV_8UC4);
-	::GetDIBits(hdcMem, hBmp, 0, h, outMat.data, &bi, DIB_RGB_COLORS);
-
-	::DeleteObject(hBmp);
-	::DeleteDC(hdcMem);
-	::ReleaseDC(hwnd, hdcWin);
-
-	// BGRA → BGR
-	cv::cvtColor(outMat, outMat, cv::COLOR_BGRA2BGR);
-	return true;
-}
 
 
 
@@ -575,15 +394,22 @@ void CPageTest::StartDetect()
 	if (hwnd == NULL)
 		return;
 
-	CString strParam, strBin;
-	if (!EnsureNcnnModel(strModel, strParam, strBin))
+	CString strGreen = GetGreenRoot();
+	CString strPython = GetGreenPython();
+	CString strScript = strGreen + _T("\\scripts\\infer_ui.py");
+	if (strGreen.IsEmpty() || !::PathFileExists(strPython) || !::PathFileExists(strScript))
 	{
+		AfxMessageBox(_T("未找到 scripts\\infer_ui.py，请检查绿色包是否完整。"), MB_ICONWARNING);
 		SetStatus(_T("就绪"));
 		return;
 	}
 
-	SetStatus(_T("加载 NCNN 模型..."));
-	AfxGetApp()->DoWaitCursor(1);
+	if (m_strResultPath.IsEmpty())
+	{
+		AfxMessageBox(_T("未找到输出目录，请检查绿色包是否完整。"), MB_ICONWARNING);
+		SetStatus(_T("就绪"));
+		return;
+	}
 
 	CString strTmp;
 	int nImgsz = 0;
@@ -601,56 +427,47 @@ void CPageTest::StartDetect()
 	dIou = _tcstod(strTmp, NULL);
 	if (dIou <= 0.0 || dIou > 1.0) dIou = 0.45;
 
-	m_detector.SetInputSize(nImgsz);
-	m_detector.SetConfThreshold((float)dConf);
-	m_detector.SetNmsThreshold((float)dIou);
-
-	CString strDataYaml = GetProjectDataYaml();
-	std::vector<std::string> names;
-	if (LoadClassNames(strDataYaml, names))
-		m_detector.SetClassNames(names);
-
-	CT2A caParam(strParam, CP_UTF8);
-	CT2A caBin(strBin, CP_UTF8);
-	if (!m_detector.Load(std::string((LPCSTR)caParam), std::string((LPCSTR)caBin)))
-	{
-		AfxGetApp()->DoWaitCursor(0);
-		AfxMessageBox(_T("NCNN 模型加载失败，请确认 .param/.bin 文件完整。"), MB_ICONWARNING);
-		SetStatus(_T("就绪"));
-		return;
-	}
-	AfxGetApp()->DoWaitCursor(0);
-
 	m_ullResultTime = 0;
 	::DeleteFile(m_strResultPath);
 	m_wndPreview.SetImage(NULL);
+
+	CString strCmd;
+	strCmd.Format(_T("\"%s\" \"%s\" --weights \"%s\" --hwnd 0x%I64X --imgsz %d --conf %.2f --iou %.2f --mode single --out \"%s\""),
+		(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strModel,
+		(unsigned __int64)(UINT_PTR)hwnd, nImgsz, dConf, dIou, (LPCTSTR)m_strResultPath);
 
 	SetRunning(true);
 	SetStatus(_T("检测中..."));
 	AfxGetApp()->DoWaitCursor(1);
 
-	cv::Mat frame;
-	if (CaptureWindowMat(hwnd, m_bClientOnly, frame) && !frame.empty())
+	STARTUPINFO si = { sizeof(si) };
+	si.dwFlags = STARTF_USESHOWWINDOW;
+	si.wShowWindow = SW_HIDE;
+	PROCESS_INFORMATION pi = { 0 };
+	DWORD dwExit = (DWORD)-1;
+
+	if (::CreateProcess(NULL, (LPTSTR)(LPCTSTR)strCmd, NULL, NULL, FALSE,
+		CREATE_NO_WINDOW, NULL, strGreen, &si, &pi))
 	{
-		cv::Mat result = m_detector.DetectAndDraw(frame);
-		if (!result.empty() && !m_strResultPath.IsEmpty())
-		{
-			CT2A caOut(m_strResultPath, CP_UTF8);
-			std::vector<int> params;
-			params.push_back(cv::IMWRITE_JPEG_QUALITY);
-			params.push_back(90);
-			cv::imwrite(std::string((LPCSTR)caOut), result, params);
-		}
-		SetStatus(_T("检测完成"));
-	}
-	else
-	{
-		SetStatus(_T("截图失败，请确认目标窗口存在且未最小化。"));
+		::WaitForSingleObject(pi.hProcess, INFINITE);
+		::GetExitCodeProcess(pi.hProcess, &dwExit);
+		::CloseHandle(pi.hThread);
+		::CloseHandle(pi.hProcess);
 	}
 
 	AfxGetApp()->DoWaitCursor(0);
 	SetRunning(false);
-	LoadResultImage();
+
+	if (dwExit == 0 && ::PathFileExists(m_strResultPath))
+	{
+		SetStatus(_T("检测完成"));
+		LoadResultImage();
+	}
+	else
+	{
+		AfxMessageBox(_T("检测失败，请确认模型与绿色包环境完整。"), MB_ICONWARNING);
+		SetStatus(_T("就绪"));
+	}
 }
 
 void CPageTest::SetRunning(bool bRunning)
