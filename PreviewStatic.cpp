@@ -1,4 +1,4 @@
-// PreviewStatic.cpp:
+﻿// PreviewStatic.cpp:
 //
 #include "pch.h"
 #include "PreviewStatic.h"

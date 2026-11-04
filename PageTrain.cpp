@@ -105,7 +105,7 @@ BOOL CPageTrain::OnInitDialog()
 		}
 	}
 
-	SetStatus(_T("灏辩华"));
+	SetStatus(_T("就绪"));
 	Layout();
 
 	CEdit* pEditLog = (CEdit*)GetDlgItem(IDC_EDIT_LOG_TRAIN);
@@ -518,20 +518,20 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 	CString strLog;
 	LPCTSTR pszDevName = bGpu ? _T("GPU") : _T("CPU");
 	if (bResume)
-		strLog.Format(_T("==== 缁寮€濮嬶紙%s锛屼粠 %s锛?===\r\n%s\r\n"), pszDevName, (LPCTSTR)strWeights, (LPCTSTR)strCmd);
+		strLog.Format(_T("==== 续训开始（%s，从 %s）====\r\n%s\r\n"), pszDevName, (LPCTSTR)strWeights, (LPCTSTR)strCmd);
 	else
-		strLog.Format(_T("==== 寮€濮嬭缁冿紙%s锛?===\r\n%s\r\n"), pszDevName, (LPCTSTR)strCmd);
+		strLog.Format(_T("==== 开始训练（%s）====\r\n%s\r\n"), pszDevName, (LPCTSTR)strCmd);
 	AppendLog(strLog);
 
 	m_bExporting = false;
 	if (!m_capture.StartProcess(strCmd, GetSafeHwnd()))
 	{
-		AppendLog(_T("鍒涘缓璁粌杩涚▼澶辫触銆俓r\n"));
-		SetStatus(_T("璁粌鍚姩澶辫触"));
+		AppendLog(_T("创建训练进程失败。\r\n"));
+		SetStatus(_T("训练启动失败"));
 		return;
 	}
 	SetRunning(true);
-	SetStatus(_T("璁粌涓?.."));
+	SetStatus(_T("训练中..."));
 }
 
 void CPageTrain::OnBnClickedBtnTrainStop()
@@ -539,11 +539,11 @@ void CPageTrain::OnBnClickedBtnTrainStop()
 	if (!m_capture.IsRunning())
 		return;
 
-	AppendLog(_T("==== 姝ｅ湪鍋滄锛岃绋嶅€?====\r\n"));
-	SetStatus(_T("姝ｅ湪鍋滄..."));
+	AppendLog(_T("==== 正在停止，请稍等 ====\r\n"));
+	SetStatus(_T("正在停止..."));
 	m_capture.Stop();   
 	SetRunning(false);
-	SetStatus(_T("Stopped"));
+	SetStatus(_T("已停止"));
 }
 
 void CPageTrain::OnBnClickedBtnExport()
@@ -782,11 +782,11 @@ LRESULT CPageTrain::OnProcExit(WPARAM wParam, LPARAM lParam)
 
 	CStringW tip;
 	if (bExport)
-		tip.Format(dwExit == 0 ? L"\r\n==== 瀵煎嚭瀹屾垚 ====\r\n"
-			: L"\r\n==== 瀵煎嚭缁撴潫锛岄€€鍑虹爜 %lu ====\r\n", dwExit);
+		tip.Format(dwExit == 0 ? L"\r\n==== 导出完成 ====\r\n"
+			: L"\r\n==== 导出结束，退出码 %lu ====\r\n", dwExit);
 	else
-		tip.Format(dwExit == 0 ? L"\r\n==== 璁粌瀹屾垚 ====\r\n"
-			: L"\r\n==== 璁粌缁撴潫锛岄€€鍑虹爜 %lu ====\r\n", dwExit);
+		tip.Format(dwExit == 0 ? L"\r\n==== 训练完成 ====\r\n"
+			: L"\r\n==== 训练结束，退出码 %lu ====\r\n", dwExit);
 
 	CHARFORMAT2W cf;
 	cf.cbSize = sizeof(CHARFORMAT2W);
@@ -800,9 +800,9 @@ LRESULT CPageTrain::OnProcExit(WPARAM wParam, LPARAM lParam)
 	m_richLog.LineScroll(m_richLog.GetLineCount() - 1);
 
 	if (bExport)
-		SetStatus(dwExit == 0 ? _T("瀵煎嚭瀹屾垚") : _T("瀵煎嚭澶辫触"));
+		SetStatus(dwExit == 0 ? _T("导出完成") : _T("导出失败"));
 	else
-		SetStatus(dwExit == 0 ? _T("璁粌瀹屾垚") : _T("璁粌澶辫触"));
+		SetStatus(dwExit == 0 ? _T("训练完成") : _T("训练失败"));
 
 	return 0;
 }

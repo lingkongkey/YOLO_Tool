@@ -79,7 +79,7 @@ BOOL CPageCapture::OnInitDialog()
 	SetDlgItemText(IDC_EDIT_SAVE_DIR, m_strSaveDir);
 
 	RefreshDirCount();
-	UpdateStatus(_T("灏辩华"));
+	UpdateStatus(_T("就绪"));
 	
 	FillCaptureList();
 
@@ -201,7 +201,7 @@ bool CPageCapture::ValidateTarget(bool bShowError)
 	if (hwnd == NULL || !::IsWindow(hwnd))
 	{
 		if (bShowError)
-			AfxMessageBox(_T("绐楀彛鍙ユ焺鏃犳晥锛岃閲嶆柊濉啓锛屾垨鎸変綇鍑嗘槦鎷栧埌鐩爣绐楀彛涓婅嚜鍔ㄨ幏鍙栥"), MB_ICONWARNING);
+			AfxMessageBox(_T("窗口句柄无效，请重新填写，或按住准星拖到目标窗口上自动获取。"), MB_ICONWARNING);
 		return false;
 	}
 
@@ -297,11 +297,11 @@ bool CPageCapture::CaptureOnce()
 		if (m_bAuto)
 		{
 			StopAuto();
-			AfxMessageBox(_T("鐩爣绐楀彛宸插叧闂紝鑷姩鎴浘宸插仠姝"), MB_ICONWARNING);
+			AfxMessageBox(_T("目标窗口已关闭，自动截图已停止"), MB_ICONWARNING);
 		}
 		else
 		{
-			AfxMessageBox(_T("鐩爣绐楀彛鍙ユ焺宸插け鏁堬紝璇烽噸鏂拌幏鍙栥"), MB_ICONWARNING);
+			AfxMessageBox(_T("目标窗口句柄已失效，请重新获取。"), MB_ICONWARNING);
 		}
 		return false;
 	}
@@ -319,7 +319,7 @@ bool CPageCapture::CaptureOnce()
 		::SHCreateDirectoryEx(NULL, m_strSaveDir, NULL);
 		if (!::PathIsDirectory(m_strSaveDir))
 		{
-			AfxMessageBox(_T("淇濆瓨鐩綍鍒涘缓澶辫触锛") + m_strSaveDir, MB_ICONWARNING);
+			AfxMessageBox(_T("保存目录创建失败：") + m_strSaveDir, MB_ICONWARNING);
 			return false;
 		}
 	}
@@ -329,7 +329,7 @@ bool CPageCapture::CaptureOnce()
 	CImage image;
 	if (!CaptureWindowToImage(m_hwndTarget, bClientOnly, image))
 	{
-		AfxMessageBox(_T("鎴浘澶辫触锛岃纭鐩爣绐楀彛鏈渶灏忓寲涓斿彞鏌勬湁鏁堛"), MB_ICONWARNING);
+		AfxMessageBox(_T("截图失败，请确认目标窗口未最小化且句柄有效。"), MB_ICONWARNING);
 		return false;
 	}
 
@@ -342,7 +342,7 @@ bool CPageCapture::CaptureOnce()
 		if (dRatio < DIFF_RATIO_THRESHOLD && dMean < DIFF_MEAN_THRESHOLD)
 		{
 			m_wndPreview.SetImage(&image);
-			UpdateStatus(m_bAuto ? _T("鑷姩鎴浘涓紙鍙樺寲涓嶅ぇ宸茶烦杩囷級") : _T("鍙樺寲涓嶅ぇ锛屾湭淇濆瓨"));
+			UpdateStatus(m_bAuto ? _T("自动截图中（变化不大已跳过）") : _T("变化不大，未保存"));
 			return true;
 		}
 	}
@@ -358,7 +358,7 @@ bool CPageCapture::CaptureOnce()
 
 	if (FAILED(image.Save(strFile, Gdiplus::ImageFormatJPEG)))
 	{
-		AfxMessageBox(_T("Failed to save image: ") + strFile, MB_ICONWARNING);
+		AfxMessageBox(_T("保存图片失败: ") + strFile, MB_ICONWARNING);
 		return false;
 	}
 
@@ -368,7 +368,7 @@ bool CPageCapture::CaptureOnce()
 	m_imgPrevThumb.Attach(thumb.Detach());
 	m_wndPreview.SetImage(&image);
 	FillCaptureList();
-	UpdateStatus(m_bAuto ? _T("鑷姩鎴浘涓") : _T("灏辩华"));
+	UpdateStatus(m_bAuto ? _T("自动截图中") : _T("就绪"));
 	return true;
 }
 
@@ -388,8 +388,8 @@ void CPageCapture::StartAuto()
 	m_bAuto = true;
 	SetTimer(IDT_AUTO_CAPTURE, (UINT)nInterval, NULL);
 	SetUiIdle(false);
-	SetDlgItemText(IDC_BTN_AUTO, _T("鍋滄鑷姩鎴浘"));
-	UpdateStatus(_T("鑷姩鎴浘涓"));
+	SetDlgItemText(IDC_BTN_AUTO, _T("停止自动截图"));
+	UpdateStatus(_T("自动截图中"));
 }
 
 void CPageCapture::StopAuto()
@@ -400,8 +400,8 @@ void CPageCapture::StopAuto()
 		m_bAuto = false;
 	}
 	SetUiIdle(true);
-	SetDlgItemText(IDC_BTN_AUTO, _T("Start Auto"));
-	UpdateStatus(_T("灏辩华"));
+	SetDlgItemText(IDC_BTN_AUTO, _T("开始自动截图"));
+	UpdateStatus(_T("就绪"));
 }
 
 void CPageCapture::SetUiIdle(bool bIdle)
@@ -485,7 +485,7 @@ void CPageCapture::OnBnClickedBtnManual()
 void CPageCapture::OnBnClickedBtnBrowse()
 {
 	CFolderPickerDialog dlgFolder;
-	dlgFolder.m_ofn.lpstrTitle = _T("閫夋嫨椤圭洰鏍圭洰褰曪紙鎴浘/鏍囨敞/璁粌鎴愭灉閮戒繚瀛樺湪杩欓噷锛");
+	dlgFolder.m_ofn.lpstrTitle = _T("选择项目根目录（截图/标注/训练成果都保存在这里）");
 
 	CString strInit = GetProjectRoot();
 	if (!strInit.IsEmpty() && ::PathIsDirectory(strInit))
@@ -497,7 +497,7 @@ void CPageCapture::OnBnClickedBtnBrowse()
 	CString strRoot = dlgFolder.GetPathName();
 	if (!SetProjectRoot(strRoot))
 	{
-		AfxMessageBox(_T("椤圭洰鐩綍鍒涘缓澶辫触锛") + strRoot, MB_ICONWARNING);
+		AfxMessageBox(_T("项目目录创建失败：") + strRoot, MB_ICONWARNING);
 		return;
 	}
 
@@ -507,17 +507,17 @@ void CPageCapture::OnBnClickedBtnBrowse()
 	m_strSaveDir = GetProjectImagesDir();
 	SetDlgItemText(IDC_EDIT_SAVE_DIR, m_strSaveDir);
 	FillCaptureList();
-	UpdateStatus(_T("灏辩华"));
+	UpdateStatus(_T("就绪"));
 
 	CString strMsg;
 	strMsg.Format(
-		_T("椤圭洰鏍圭洰褰曞凡璁剧疆锛?s\r\n\r\n宸插垱寤哄瓙鐩綍锛歕r\n")
-		_T("  dataset\\images\\train銆乿al\r\n")
-		_T("  dataset\\labels\\train銆乿al\r\n")
+		_T("项目根目录已设置：%s\r\n\r\n已创建子目录：\r\n")
+		_T("  dataset\\images\\train、val\r\n")
+		_T("  dataset\\labels\\train、val\r\n")
 		_T("  dataset\\data.yaml\r\n")
 		_T("  runs\\detect\\train\r\n")
 		_T("  models\r\n")
-		_T("  output\\ui\r\n\r\n鎴浘淇濆瓨鍒帮細%s"),
+		_T("  output\\ui\r\n\r\n截图保存到：%s"),
 		(LPCTSTR)strRoot, (LPCTSTR)m_strSaveDir);
 	AfxMessageBox(strMsg, MB_ICONINFORMATION);
 }
@@ -535,7 +535,7 @@ void CPageCapture::OnBnClickedBtnCheck()
 	if (ValidateTarget(false))
 		UpdateTargetTitle();
 	else
-		SetDlgItemText(IDC_EDIT_TITLE, _T("(鏃犳晥鍙ユ焺)"));
+		SetDlgItemText(IDC_EDIT_TITLE, _T("(无效句柄)"));
 }
 
 LRESULT CPageCapture::OnFinderPicked(WPARAM wParam, LPARAM /*lParam*/)
@@ -710,8 +710,8 @@ void CPageCapture::ShowCaptureMenu(int x, int y)
 
 	CMenu menu;
 	menu.CreatePopupMenu();
-	menu.AppendMenu(MF_STRING, 1, _T("鍒犻櫎鍥剧墖"));
-	menu.AppendMenu(MF_STRING, 2, _T("鎵撳紑鎵€鍦ㄦ枃浠跺す"));
+	menu.AppendMenu(MF_STRING, 1, _T("删除图片"));
+	menu.AppendMenu(MF_STRING, 2, _T("打开所在文件夹"));
 
 	int nCmd = menu.TrackPopupMenu(TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN,
 		x, y, this);
@@ -723,20 +723,20 @@ void CPageCapture::ShowCaptureMenu(int x, int y)
 		::PathStripPath(szName);
 
 		CString strMsg;
-		strMsg.Format(_T("纭畾鍒犻櫎杩欏紶鎴浘鍚楋紵\r\n\r\n%s"), szName);
+		strMsg.Format(_T("确定删除这张截图吗？\r\n\r\n%s"), szName);
 		if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) != IDYES)
 			return;
 
 		::SetFileAttributes(strFile, FILE_ATTRIBUTE_NORMAL);
 		if (!::DeleteFile(strFile))
 		{
-			AfxMessageBox(_T("鍒犻櫎澶辫触: ") + strFile, MB_ICONWARNING);
+			AfxMessageBox(_T("删除失败: ") + strFile, MB_ICONWARNING);
 			return;
 		}
 
 		FillCaptureList();
 		RefreshDirCount();
-		UpdateStatus(m_bAuto ? _T("鑷姩鎴浘涓") : _T("灏辩华"));
+		UpdateStatus(m_bAuto ? _T("自动截图中") : _T("就绪"));
 	}
 	else if (nCmd == 2)
 	{

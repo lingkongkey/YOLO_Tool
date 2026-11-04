@@ -1,4 +1,4 @@
-// NcnnDetector.cpp: ncnn YOLO
+﻿// NcnnDetector.cpp: ncnn YOLO
 //
 #include "pch.h"
 #include "NcnnDetector.h"

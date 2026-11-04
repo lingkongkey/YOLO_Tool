@@ -1,4 +1,4 @@
-//{{NO_DEPENDENCIES}}
+﻿//{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ ���ɵİ����ļ���
 // �� YOLO_Tool.rc ʹ��
 //

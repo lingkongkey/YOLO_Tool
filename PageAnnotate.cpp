@@ -226,9 +226,9 @@ BOOL CPageAnnotate::PreTranslateMessage(MSG* pMsg)
 		!UiIsEditControl(pMsg->hwnd))
 	{
 		if (m_canvas.Undo())
-			SetStatus(_T("Undo: no step"));
+			SetStatus(_T("已撤销"));
 		else
-			SetStatus(_T("娌℃湁鍙挙閿€鐨"));
+			SetStatus(_T("没有可撤销的"));
 		return TRUE;
 	}
 
@@ -509,11 +509,11 @@ void CPageAnnotate::ShowListMenu(int x, int y)
 	menu.CreatePopupMenu();
 	CString strDelItem;
 	if (nCount > 1)
-		strDelItem.Format(_T("鍒犻櫎閫変腑鐨?%d 寮犲浘鐗囷紙鍚爣绛撅級"), nCount);
+		strDelItem.Format(_T("删除选中的 %d 张图片（含标签）"), nCount);
 	else
-		strDelItem = _T("鍒犻櫎鍥剧墖锛堝惈鏍囩锛");
+		strDelItem = _T("删除图片（含标签）");
 	menu.AppendMenu(MF_STRING, 1, strDelItem);
-	menu.AppendMenu(MF_STRING, 2, _T("鎵撳紑鎵€鍦ㄦ枃浠跺す"));
+	menu.AppendMenu(MF_STRING, 2, _T("打开所在文件夹"));
 
 	int nCmd = menu.TrackPopupMenu(TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN,
 		x, y, this);
@@ -531,15 +531,15 @@ void CPageAnnotate::ShowListMenu(int x, int y)
 		if (nCount > 5)
 		{
 			CString strMore;
-			strMore.Format(_T("  ... 鍏?%d 寮燶r\n"), nCount);
+			strMore.Format(_T("  ... 共 %d 张\r\n"), nCount);
 			strList += strMore;
 		}
 
 		CString strMsg;
 		if (nCount > 1)
-			strMsg.Format(_T("纭畾鍒犻櫎閫変腑鐨?%d 寮犲浘鐗囧悧锛焅r\n瀵瑰簲鏍囩涔熶細涓€骞跺垹闄ゃ€俓r\n\r\n%s"), nCount, (LPCTSTR)strList);
+			strMsg.Format(_T("确定删除选中的 %d 张图片吗？\r\n对应标签也会一并删除。\r\n\r\n%s"), nCount, (LPCTSTR)strList);
 		else
-			strMsg.Format(_T("纭畾鍒犻櫎杩欏紶鍥剧墖鍚楋紵\r\n瀵瑰簲鏍囩涔熶細涓€骞跺垹闄ゃ€俓r\n\r\n%s"), (LPCTSTR)strList);
+			strMsg.Format(_T("确定删除这张图片吗？\r\n对应标签也会一并删除。\r\n\r\n%s"), (LPCTSTR)strList);
 		if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) != IDYES)
 			return;
 
@@ -583,13 +583,13 @@ void CPageAnnotate::ShowListMenu(int x, int y)
 
 		CString strLog;
 		if (nCount > 1)
-			strLog.Format(_T("宸叉壒閲忓垹闄?%d 寮犲浘鐗囥€?d 涓爣绛炬枃浠禱r\n"), nDelImg, nDelLbl);
+			strLog.Format(_T("已批量删除 %d 张图片、%d 个标签文件\r\n"), nDelImg, nDelLbl);
 		else
-			strLog.Format(_T("宸插垹闄? %s\r\n"), (LPCTSTR)arrSel[0]);
+			strLog.Format(_T("已删除 %s\r\n"), (LPCTSTR)arrSel[0]);
 		if (nFail > 0)
 		{
 			CString strFail;
-			strFail.Format(_T("鏈?%d 涓枃浠跺垹闄ゅけ璐ワ紙鍙兘琚崰鐢級\r\n"), nFail);
+			strFail.Format(_T("共 %d 个文件删除失败（可能被占用）\r\n"), nFail);
 			strLog += strFail;
 			AfxMessageBox(strLog, MB_ICONWARNING);
 		}
@@ -626,7 +626,7 @@ bool CPageAnnotate::LoadImageAt(int nIndex, bool bKeepListSelection)
 
 	if (m_canvas.HasImage() && m_canvas.IsModified())
 	{
-		if (AfxMessageBox(_T("褰撳墠鍥惧儚鐨勬爣娉ㄥ皻鏈繚瀛橈紝鏄惁淇濆瓨锛", MB_YESNO | MB_ICONQUESTION)) == IDYES)
+		if (AfxMessageBox(_T("当前图像的标注尚未保存，是否保存？"), MB_YESNO | MB_ICONQUESTION) == IDYES)
 		{
 			if (!SaveCurrentLabels())
 				return false;
@@ -673,10 +673,10 @@ bool CPageAnnotate::SaveCurrentLabels()
 	CString strLabel = GetLabelPathFor(m_canvas.GetImagePath());
 	if (!m_canvas.SaveLabels(strLabel))
 	{
-		AppendLog(_T("鏍囩淇濆瓨澶辫触: ") + strLabel + _T("\r\n"));
+		AppendLog(_T("标签保存失败: ") + strLabel + _T("\r\n"));
 		return false;
 	}
-	AppendLog(_T("宸蹭繚瀛樻爣娉? ") + strLabel + _T("\r\n"));
+	AppendLog(_T("已保存标注: ") + strLabel + _T("\r\n"));
 	UpdateAnnoStatus();
 	return true;
 }
@@ -685,14 +685,14 @@ bool CPageAnnotate::SaveAndNext()
 {
 	if (!m_canvas.HasImage())
 	{
-		SetStatus(_T("鏈姞杞藉浘鍍忥紝Ctrl+S 鏃犳搷浣"));
+		SetStatus(_T("未加载图像，Ctrl+S 无操作"));
 		return false;
 	}
 
 	if (m_canvas.GetBoxCount() <= 0)
 	{
-		AppendLog(_T("Ctrl+S 鏈繚瀛橈細褰撳墠鍥剧墖娌℃湁鏍囨敞妗嗭紝鍋滃湪鍘熷浘\r\n"));
-		SetStatus(_T("褰撳墠鍥剧墖娌℃湁鏍囨敞妗嗭紝璇峰厛鐢绘鍐嶆寜 Ctrl+S"));
+		AppendLog(_T("Ctrl+S 未保存：当前图片没有标注框，停在原图\r\n"));
+		SetStatus(_T("当前图片没有标注框，请先画框再按 Ctrl+S"));
 		return false;
 	}
 
@@ -703,12 +703,12 @@ bool CPageAnnotate::SaveAndNext()
 	if (nNext < (int)m_arrImages.GetSize())
 	{
 		LoadImageAt(nNext);
-		AppendLog(_T("Ctrl+S 宸蹭繚瀛樺苟璺冲埌涓嬩竴寮燶r\n"));
+		AppendLog(_T("Ctrl+S 已保存并跳到下一张\r\n"));
 	}
 	else
 	{
-		SetStatus(_T("Already last image, labels saved"));
-		AppendLog(_T("Ctrl+S 宸蹭繚瀛橈紙宸叉槸鏈€鍚庝竴寮狅級\r\n"));
+		SetStatus(_T("已是最后一张，标注已保存"));
+		AppendLog(_T("Ctrl+S 已保存（已是最后一张）\r\n"));
 	}
 	return true;
 }
@@ -721,19 +721,19 @@ void CPageAnnotate::UpdateAnnoStatus()
 		TCHAR szName[MAX_PATH] = { 0 };
 		_tcsncpy_s(szName, m_canvas.GetImagePath(), _TRUNCATE);
 		::PathStripPath(szName);
-		str.Format(_T("鏂囦欢: %s   缂╂斁: %d%%   妗? %d   |   0-9 鍒囩被鍒紝绌虹櫧澶勬嫋鎷界敾妗嗭紝妗嗗唴鎸変綇鎷栧姩绉诲姩锛屾嫋瑙掔偣鏀瑰ぇ灏忥紝Ctrl+Z 鎾ら攢锛孌elete 鍒犻櫎妗嗭紝Ctrl+S / 鍥炶溅 淇濆瓨骞惰烦涓嬩竴寮"),
+		str.Format(_T("文件: %s   缩放: %d%%   框: %d   |   0-9 切类别，空白处拖拽画框，框内按住拖动移动，拖角点改大小，Ctrl+Z 撤销，Delete 删除框，Ctrl+S / 回车 保存并跳到下一张"),
 			szName, m_canvas.GetZoomPercent(), m_canvas.GetBoxCount());
 	}
 	else
 	{
-		str = _T("鏈姞杞藉浘鍍忥紝璇峰湪宸︿晶鍒楄〃涓€夋嫨涓€寮");
+		str = _T("未加载图像，请在左侧列表中选择一张");
 	}
 
 	int nMulti = GetSelectedCount();
 	if (nMulti >= 2)
 	{
 		CString strMulti;
-		strMulti.Format(_T("   |   %d images selected (Ctrl/Shift multi-select, right-click batch delete)"), nMulti);
+		strMulti.Format(_T("   |   已选 %d 张（Ctrl/Shift 多选，右键批量删除）"), nMulti);
 		str += strMulti;
 	}
 	SetStatus(str);
@@ -817,7 +817,7 @@ void CPageAnnotate::OnCbnSelchangeComboClasses()
 		CString strName;
 		pCombo->GetLBText(nSel, strName);
 		CString strTip;
-		strTip.Format(_T("褰撳墠绫诲埆 %s"), (LPCTSTR)strName);
+		strTip.Format(_T("当前类别 %s"), (LPCTSTR)strName);
 		SetStatus(strTip);
 	}
 }
@@ -924,14 +924,14 @@ bool CPageAnnotate::SaveClasses()
 	CString strDataset = GetDatasetDir();
 	if (strDataset.IsEmpty() || !::PathIsDirectory(strDataset))
 	{
-		AfxMessageBox(_T("鏈壘鍒伴」鐩暟鎹泦"), MB_ICONWARNING);
+		AfxMessageBox(_T("未找到项目数据集"), MB_ICONWARNING);
 		return false;
 	}
 
 	CStringArray arrNames;
 	if (!ParseClassNames(arrNames))
 	{
-		AfxMessageBox(_T("璇疯嚦灏戝～鍐欎竴涓被鍒紙姣忚涓€涓級銆"), MB_ICONWARNING);
+		AfxMessageBox(_T("请至少填写一个类别（每行一个）。"), MB_ICONWARNING);
 		return false;
 	}
 
@@ -1012,10 +1012,10 @@ void CPageAnnotate::OnBnClickedBtnSaveClasses()
 		CStringArray arrNames;
 		ParseClassNames(arrNames);
 		CString strMsg;
-		strMsg.Format(_T("宸蹭繚瀛?%d 涓被鍒埌 classes.txt 涓?data.yaml\r\n"), (int)arrNames.GetSize());
+		strMsg.Format(_T("已保存 %d 个类别到 classes.txt 和 data.yaml\r\n"), (int)arrNames.GetSize());
 		AppendLog(strMsg);
 		FillClassCombo();
-		SetStatus(_T("Classes saved"));
+		SetStatus(_T("类别已保存"));
 	}
 }
 
@@ -1027,7 +1027,7 @@ void CPageAnnotate::OnBnClickedBtnAnnotate()
 	CString strPython = GetGreenPython();
 	if (strGreen.IsEmpty() || strPython.IsEmpty())
 	{
-		AfxMessageBox(_T("鏈壘鍒?YOLO_Green 缁胯壊鍖呮垨 python.exe銆"), MB_ICONWARNING);
+		AfxMessageBox(_T("未找到 YOLO_Green 绿色包或 python.exe。"), MB_ICONWARNING);
 		return;
 	}
 
@@ -1062,14 +1062,14 @@ void CPageAnnotate::OnBnClickedBtnAnnotate()
 	CString strImgs = GetProjectImagesDir();
 	if (strImgs.IsEmpty() || !::PathIsDirectory(strImgs))
 	{
-		AfxMessageBox(_T("鏈壘鍒拌缁冨浘鐗囩洰褰曪紝璇峰厛鍦ㄦ埅鍥鹃〉閫夋嫨椤圭洰鏍圭洰褰曘"), MB_ICONWARNING);
+		AfxMessageBox(_T("未找到训练图片目录，请先在截图页选择项目根目录。"), MB_ICONWARNING);
 		return;
 	}
 
 	CString strScript = strGreen + _T("\\scripts\\auto_annotate.py");
 	if (!::PathFileExists(strScript))
 	{
-		AfxMessageBox(_T("鏈壘鍒?scripts\\auto_annotate.py锛岃妫€鏌ョ豢鑹插寘鏄惁瀹屾暣銆"), MB_ICONWARNING);
+		AfxMessageBox(_T("未找到 scripts\\auto_annotate.py，请检查绿色包是否完整。"), MB_ICONWARNING);
 		return;
 	}
 
@@ -1077,16 +1077,16 @@ void CPageAnnotate::OnBnClickedBtnAnnotate()
 	strCmd.Format(_T("\"%s\" -X utf8 -u \"%s\" --imgs \"%s\" --weights \"%s\" --conf %s"),
 		(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strImgs, (LPCTSTR)strWeightsPath, (LPCTSTR)strConf);
 
-	AppendLog(_T("==== 寮€濮嬮鏍囨敞 ====\r\n") + strCmd + _T("\r\n"));
+	AppendLog(_T("==== 开始预标注 ====\r\n") + strCmd + _T("\r\n"));
 
 	if (!m_capture.StartProcess(strCmd, GetSafeHwnd()))
 	{
-		AppendLog(_T("鍒涘缓棰勬爣娉ㄨ繘绋嬪け璐ャ€俓r\n"));
-		SetStatus(_T("Pre-label start failed"));
+		AppendLog(_T("创建预标注进程失败。\r\n"));
+		SetStatus(_T("预标注启动失败"));
 		return;
 	}
 	SetRunning(true);
-	SetStatus(_T("棰勬爣娉ㄤ腑..."));
+	SetStatus(_T("预标注中..."));
 }
 
 void CPageAnnotate::OnCbnSelchangeComboAiProvider()
@@ -1105,7 +1105,7 @@ void CPageAnnotate::OnBnClickedBtnAiAnnotate()
 	{
 		m_bAiStop = true;
 		GetDlgItem(IDC_BTN_AI_ANNOTATE)->EnableWindow(FALSE);
-		SetStatus(_T("AI 鏍囨敞灏嗗湪褰撳墠鍥剧墖澶勭悊瀹屽悗鍋滄..."));
+		SetStatus(_T("AI 标注将在当前图片处理完后停止..."));
 		return;
 	}
 
@@ -1114,7 +1114,7 @@ void CPageAnnotate::OnBnClickedBtnAiAnnotate()
 	strKey.Trim();
 	if (strKey.IsEmpty())
 	{
-		AfxMessageBox(_T("璇峰厛鍦ㄤ笂闈㈢殑 AI Key 杈撳叆妗嗕腑濉叆澶фā鍨?API Key銆"), MB_ICONINFORMATION);
+		AfxMessageBox(_T("请先在上面的 AI Key 输入框中填入大模型 API Key。"), MB_ICONINFORMATION);
 		return;
 	}
 
@@ -1122,13 +1122,13 @@ void CPageAnnotate::OnBnClickedBtnAiAnnotate()
 	CString strPython = GetGreenPython();
 	if (strGreen.IsEmpty() || strPython.IsEmpty())
 	{
-		AfxMessageBox(_T("鏈壘鍒?YOLO_Green 缁胯壊鍖呮垨 python.exe銆"), MB_ICONWARNING);
+		AfxMessageBox(_T("未找到 YOLO_Green 绿色包或 python.exe。"), MB_ICONWARNING);
 		return;
 	}
 	CString strScript = strGreen + _T("\\scripts\\ai_annotate.py");
 	if (!::PathFileExists(strScript))
 	{
-		AfxMessageBox(_T("鏈壘鍒?scripts\\ai_annotate.py锛岃妫€鏌ョ豢鑹插寘鏄惁瀹屾暣銆"), MB_ICONWARNING);
+		AfxMessageBox(_T("未找到 scripts\\ai_annotate.py，请检查绿色包是否完整。"), MB_ICONWARNING);
 		return;
 	}
 
@@ -1163,7 +1163,7 @@ void CPageAnnotate::OnBnClickedBtnAiAnnotate()
 	SetAiRunningUI(true);
 
 	CString strLog;
-	strLog.Format(_T("==== 寮€濮?AI 鏍囨敞锛氬叡 %d 寮犳湭鏍囨敞鍥剧墖锛岄€愬紶澶勭悊 ====\r\n"),
+	strLog.Format(_T("==== 开始 AI 标注：共 %d 张未标注图片，逐张处理 ====\r\n"),
 		(int)m_arrAiTodo.GetSize());
 	AppendLog(strLog);
 	StartAiAnnotateImage();
@@ -1192,10 +1192,10 @@ void CPageAnnotate::StartAiAnnotateImage()
 
 	if (!m_capture.StartProcess(strCmd, GetSafeHwnd()))
 	{
-		AppendLog(_T("鍒涘缓 AI 鏍囨敞杩涚▼澶辫触銆俓r\n"));
+		AppendLog(_T("创建 AI 标注进程失败。\r\n"));
 		m_bAiRunning = false;
 		SetAiRunningUI(false);
-		SetStatus(_T("AI 鏍囨敞鍚姩澶辫触"));
+		SetStatus(_T("AI 标注启动失败"));
 		return;
 	}
 
@@ -1203,7 +1203,7 @@ void CPageAnnotate::StartAiAnnotateImage()
 	_tcsncpy_s(szName, strImg, _TRUNCATE);
 	::PathStripPath(szName);
 	CString strStatus;
-	strStatus.Format(_T("AI 鏍囨敞涓?(%d/%d): %s"),
+	strStatus.Format(_T("AI 标注中 (%d/%d): %s"),
 		m_nAiIndex + 1, (int)m_arrAiTodo.GetSize(), szName);
 	SetStatus(strStatus);
 }
@@ -1232,17 +1232,17 @@ void CPageAnnotate::HandleAiProcExit(DWORD dwExit)
 
 		CString strLabel = GetLabelPathFor(strImg);
 		if (!WriteUtf8File(strLabel, strContent))
-			AppendLog(_T("鏍囩鍐欏叆澶辫触: ") + strLabel + _T("\r\n"));
+			AppendLog(_T("标签写入失败: ") + strLabel + _T("\r\n"));
 
 		CString strLog;
-		strLog.Format(_T("[AI %d/%d] %s -> %d 涓\r\n"),
+		strLog.Format(_T("[AI %d/%d] %s -> %d 个框\r\n"),
 			m_nAiIndex + 1, nTotal, szName, (int)m_vecAiBoxes.size());
 		AppendLog(strLog);
 	}
 	else
 	{
 		CString strLog;
-		strLog.Format(_T("[AI %d/%d] %s 澶辫触锛堥€€鍑虹爜 %lu锛夛紝宸茶烦杩囷紝涓嬫鍙噸璇昞r\n"),
+		strLog.Format(_T("[AI %d/%d] %s 失败（退出码 %lu），已跳过，下次可重试\r\n"),
 			m_nAiIndex + 1, nTotal, szName, dwExit);
 		AppendLog(strLog);
 	}
@@ -1261,20 +1261,20 @@ void CPageAnnotate::HandleAiProcExit(DWORD dwExit)
 	m_nAiIndex++;
 	if (m_bAiStop)
 	{
-		AppendLog(_T("==== AI 鏍囨敞宸插仠姝?====\r\n"));
+		AppendLog(_T("==== AI 标注已停止 ====\r\n"));
 		m_bAiRunning = false;
 		m_bAiStop = false;
 		SetAiRunningUI(false);
-		SetStatus(_T("AI labeling stopped"));
+		SetStatus(_T("AI 标注已停止"));
 		UpdateAnnoStatus();
 		return;
 	}
 	if (m_nAiIndex >= nTotal)
 	{
-		AppendLog(_T("==== AI 鏍囨敞鍏ㄩ儴瀹屾垚 ====\r\n"));
+		AppendLog(_T("==== AI 标注全部完成 ====\r\n"));
 		m_bAiRunning = false;
 		SetAiRunningUI(false);
-		SetStatus(_T("AI 鏍囨敞瀹屾垚"));
+		SetStatus(_T("AI 标注完成"));
 		UpdateAnnoStatus();
 		return;
 	}
@@ -1302,7 +1302,7 @@ int CPageAnnotate::MergeAiClass(const CString& strAiName)
 				strNew += arrNames[k] + _T("\r\n");
 			SetDlgItemText(IDC_EDIT_CLASSES, strNew);
 			m_bAiClassesDirty = true;
-			AppendLog(_T("绫诲埆浠?AI 涓哄噯閲嶅懡鍚? ") + strOld + _T(" -> ") + strAiName + _T("\r\n"));
+			AppendLog(_T("类别以 AI 为准重命名: ") + strOld + _T(" -> ") + strAiName + _T("\r\n"));
 			return (int)i;
 		}
 	}
@@ -1315,7 +1315,7 @@ int CPageAnnotate::MergeAiClass(const CString& strAiName)
 	strText += strAiName;
 	SetDlgItemText(IDC_EDIT_CLASSES, strText);
 	m_bAiClassesDirty = true;
-	AppendLog(_T("AI 鏂板绫诲埆: ") + strAiName + _T("\r\n"));
+	AppendLog(_T("AI 新增类别: ") + strAiName + _T("\r\n"));
 	return (int)arrNames.GetSize();
 }
 
@@ -1331,7 +1331,7 @@ void CPageAnnotate::SetAiRunningUI(bool bRun)
 	GetDlgItem(IDC_BTN_LABELIMG)->EnableWindow(bRun ? FALSE : TRUE);
 	m_canvas.EnableWindow(bRun ? FALSE : TRUE);
 	GetDlgItem(IDC_BTN_AI_ANNOTATE)->EnableWindow(TRUE);
-	SetDlgItemText(IDC_BTN_AI_ANNOTATE, bRun ? _T("鍋滄AI鏍囨敞") : _T("寮€濮婣I鏍囨敞"));
+	SetDlgItemText(IDC_BTN_AI_ANNOTATE, bRun ? _T("停止AI标注") : _T("开始AI标注"));
 }
 
 void CPageAnnotate::OnBnClickedBtnLabelImg()
@@ -1340,7 +1340,7 @@ void CPageAnnotate::OnBnClickedBtnLabelImg()
 	CString strPython = GetGreenPython();
 	if (strGreen.IsEmpty() || strPython.IsEmpty())
 	{
-		AfxMessageBox(_T("鏈壘鍒?YOLO_Green 缁胯壊鍖呮垨 python.exe銆"), MB_ICONWARNING);
+		AfxMessageBox(_T("未找到 YOLO_Green 绿色包或 python.exe。"), MB_ICONWARNING);
 		return;
 	}
 
@@ -1371,12 +1371,12 @@ void CPageAnnotate::OnBnClickedBtnLabelImg()
 	{
 		::CloseHandle(pi.hThread);
 		::CloseHandle(pi.hProcess);
-		AppendLog(_T("宸插惎鍔?labelImg\r\n"));
+		AppendLog(_T("已启动 labelImg\r\n"));
 	}
 	else
 	{
 		CString strErr;
-		strErr.Format(_T("labelImg 鍚姩澶辫触 (閿欒 %lu\r\n"), ::GetLastError());
+		strErr.Format(_T("labelImg 启动失败 (错误 %lu)\r\n"), ::GetLastError());
 		AppendLog(strErr);
 	}
 }
@@ -1452,12 +1452,12 @@ LRESULT CPageAnnotate::OnProcExit(WPARAM wParam, LPARAM /*lParam*/)
 		return 0;
 	}
 
-	SetStatus(dwExit == 0 ? _T("棰勬爣娉ㄥ畬鎴") : _T(""));
+	SetStatus(dwExit == 0 ? _T("预标注完成") : _T(""));
 
 	SetRunning(false);
 
 	CString strMsg;
-	strMsg.Format(_T("==== 棰勬爣娉ㄧ粨鏉?(閫€鍑虹爜 %lu ====\r\n"), dwExit);
+	strMsg.Format(_T("==== 预标注结束 (退出码 %lu) ====\r\n"), dwExit);
 	AppendLog(strMsg);
 
 	if (dwExit == 0 && m_canvas.HasImage())

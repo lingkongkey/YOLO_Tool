@@ -1,4 +1,4 @@
-// YOLO_Tool.cpp: 定义应用程序的类行为。
+﻿// YOLO_Tool.cpp: 定义应用程序的类行为。
 //
 
 #include "pch.h"
