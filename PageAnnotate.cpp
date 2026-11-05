@@ -640,6 +640,7 @@ static const AiPreset g_aiPresets[] =
 	{ _T("通义千问(阿里)"), _T("https://dashscope.aliyuncs.com/compatible-mode/v1"),  _T("qwen3-vl-plus") },
 	{ _T("智谱GLM"),        _T("https://open.bigmodel.cn/api/paas/v4"),               _T("glm-4.5v") },
 	{ _T("DeepSeek"),       _T("https://api.deepseek.com/v1"),                        _T("deepseek-flash") },
+	{ _T("Kimi(月之暗面)"), _T("https://api.moonshot.cn/v1"),                        _T("kimi-k3.1-pro") },
 };
 static const int g_aiPresetCount = (int)(sizeof(g_aiPresets) / sizeof(g_aiPresets[0]));
 
@@ -1775,15 +1776,23 @@ void CPageAnnotate::StartAiAnnotateImage()
 				std::wstring strBody;
 				strBody += L"{\"model\":\"";
 				strBody += JsonEscape(strModel);
-				strBody += L"\",\"temperature\":0.1,\"max_tokens\":";
+				strBody += L"\",\"temperature\":";
+				// Kimi 只允许 temperature 为 1
+				if (strUrl.find(L"api.moonshot.cn") != std::wstring::npos)
+					strBody += L"1";
+				else
+					strBody += L"0.1";
+				strBody += L",\"max_tokens\":";
 				// DeepSeek 默认推理量较大，给足输出上限；智谱限制最大 1024
 				if (strUrl.find(L"api.deepseek.com") != std::wstring::npos)
 					strBody += L"8192";
 				else if (strUrl.find(L"open.bigmodel.cn") != std::wstring::npos)
 					strBody += L"1024";
+				else if (strUrl.find(L"api.moonshot.cn") != std::wstring::npos)
+					strBody += L"2048";
 				else
 					strBody += L"4096";
-				// 豆包/DeepSeek 默认开启思考模式，标注任务关掉以大幅减少推理 token
+				// 豆包/DeepSeek/智谱默认开启思考模式，标注任务关掉以大幅减少推理 token
 				if (strUrl.find(L"volces.com") != std::wstring::npos ||
 					strUrl.find(L"api.deepseek.com") != std::wstring::npos ||
 					strUrl.find(L"open.bigmodel.cn") != std::wstring::npos)
@@ -1886,8 +1895,10 @@ void CPageAnnotate::HandleAiResult(AiAnnotateResult* pResult)
 
 		int nWritten = 0;
 		int nSkipped = 0;
+		int nDup = 0;
 		CStringArray arrSkipNames;
 		CString strContent;
+		std::vector<AiBoxData> arrAccepted;
 		for (size_t i = 0; i < pResult->boxes.size(); i++)
 		{
 			const AiBoxData& b = pResult->boxes[i];
@@ -1910,6 +1921,34 @@ void CPageAnnotate::HandleAiResult(AiAnnotateResult* pResult)
 					arrSkipNames.Add(strName);
 				continue;
 			}
+
+			// 同位置去重：与已保留框 IoU >= 0.7 视为同一目标，只保留第一个
+			double x1 = b.cx - b.w * 0.5, y1 = b.cy - b.h * 0.5;
+			double x2 = b.cx + b.w * 0.5, y2 = b.cy + b.h * 0.5;
+			bool bDup = false;
+			for (size_t k = 0; k < arrAccepted.size(); k++)
+			{
+				const AiBoxData& o = arrAccepted[k];
+				double ox1 = o.cx - o.w * 0.5, oy1 = o.cy - o.h * 0.5;
+				double ox2 = o.cx + o.w * 0.5, oy2 = o.cy + o.h * 0.5;
+				double ix = min(x2, ox2) - max(x1, ox1);
+				double iy = min(y2, oy2) - max(y1, oy1);
+				if (ix <= 0 || iy <= 0)
+					continue;
+				double dInter = ix * iy;
+				double dUnion = b.w * b.h + o.w * o.h - dInter;
+				if (dUnion > 0 && dInter / dUnion >= 0.7)
+				{
+					bDup = true;
+					break;
+				}
+			}
+			if (bDup)
+			{
+				nDup++;
+				continue;
+			}
+			arrAccepted.push_back(b);
 
 			int nCls = MergeAiClass(strName);
 			CString strLine;
@@ -1936,6 +1975,12 @@ void CPageAnnotate::HandleAiResult(AiAnnotateResult* pResult)
 			if (arrSkipNames.GetSize() > 5)
 				strSkip += _T("等");
 			strSkip += _T("）");
+		}
+		if (nDup > 0)
+		{
+			CString strDup;
+			strDup.Format(_T("（已去重 %d 个重叠框）"), nDup);
+			strSkip += strDup;
 		}
 
 		CString strLog;
