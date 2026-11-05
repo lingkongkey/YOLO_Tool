@@ -636,7 +636,7 @@ static bool ParseAiBoxes(const std::wstring& strContent, LONG nWidth, LONG nHeig
 struct AiPreset { LPCTSTR szName; LPCTSTR szBase; LPCTSTR szModel; };
 static const AiPreset g_aiPresets[] =
 {
-	{ _T("豆包"), _T("https://ark.cn-beijing.volces.com/api/v3"),           _T("doubao-seed-2-1-pro-260628") },
+	{ _T("豆包"), _T("https://ark.cn-beijing.volces.com/api/v3"),           _T("doubao-seed-evolving") },
 	{ _T("通义千问"), _T("https://dashscope.aliyuncs.com/compatible-mode/v1"),  _T("qwen3-vl-plus") },
 	{ _T("GLM"),        _T("https://open.bigmodel.cn/api/paas/v4"),               _T("glm-4.6v") },
 	{ _T("DeepSeek"),       _T("https://api.deepseek.com/v1"),                        _T("deepseek-flash") },
@@ -1802,9 +1802,8 @@ void CPageAnnotate::StartAiAnnotateImage()
 				strBody += L"\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,";
 				strBody.append(strBase64.begin(), strBase64.end());
 				strBody += L"\"";
-				// 豆包/千问支持低精度图片，可大幅降低图片 token；DeepSeek 在低精度下完全检不出目标，保持原始精度
-				if (strUrl.find(L"volces.com") != std::wstring::npos ||
-					strUrl.find(L"dashscope.aliyuncs.com") != std::wstring::npos)
+				// 千问支持低精度图片，可大幅降低图片 token；豆包/DeepSeek 在低精度下漏检整类小目标（乌龟/蜗牛），保持原始精度
+				if (strUrl.find(L"dashscope.aliyuncs.com") != std::wstring::npos)
 					strBody += L",\"detail\":\"low\"";
 				strBody += L"}}]}]}";
 
