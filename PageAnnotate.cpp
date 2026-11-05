@@ -650,6 +650,7 @@ BOOL CPageAnnotate::OnInitDialog()
 	CAppConfig& cfg = CAppConfig::Instance();
 
 	FillWeightsCombo();
+	SetDlgItemText(IDC_EDIT_CONF, _T("0.5"));
 
 	CComboBox* pProvider = (CComboBox*)GetDlgItem(IDC_COMBO_AI_PROVIDER);
 	if (pProvider != NULL)
