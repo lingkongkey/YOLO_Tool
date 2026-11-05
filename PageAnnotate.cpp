@@ -1792,10 +1792,10 @@ void CPageAnnotate::StartAiAnnotateImage()
 					strBody += L"1024";
 				else
 					strBody += L"4096";
-				// 豆包/DeepSeek 默认开启思考模式，标注任务关掉以大幅减少推理 token；
+				// DeepSeek 默认开启思考模式，标注任务关掉以大幅减少推理 token；
+				// 豆包关闭思考后漏检整类小目标，保持默认思考；
 				// GLM 不发 thinking 参数：其 thinking 系列模型不支持关闭（报 1210），普通视觉模型本就不需要
-				if (strUrl.find(L"volces.com") != std::wstring::npos ||
-					strUrl.find(L"api.deepseek.com") != std::wstring::npos)
+				if (strUrl.find(L"api.deepseek.com") != std::wstring::npos)
 					strBody += L",\"thinking\":{\"type\":\"disabled\"}";
 				strBody += L",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"";
 				strBody += JsonEscape(strPrompt);
