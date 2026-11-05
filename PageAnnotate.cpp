@@ -638,6 +638,7 @@ static const AiPreset g_aiPresets[] =
 	{ _T("通义千问(阿里)"), _T("https://dashscope.aliyuncs.com/compatible-mode/v1"),  _T("qwen-vl-max") },
 	{ _T("智谱GLM"),        _T("https://open.bigmodel.cn/api/paas/v4"),               _T("glm-4v-flash") },
 	{ _T("OpenAI"),         _T("https://api.openai.com/v1"),                          _T("gpt-4o-mini") },
+	{ _T("DeepSeek"),       _T("https://api.deepseek.com/v1"),                        _T("deepseek-flash") },
 };
 static const int g_aiPresetCount = (int)(sizeof(g_aiPresets) / sizeof(g_aiPresets[0]));
 
@@ -1742,7 +1743,7 @@ void CPageAnnotate::StartAiAnnotateImage()
 		}
 		else
 		{
-			const LONG nMaxSide = 1280;
+			const LONG nMaxSide = 1024;
 			LONG nSendW = nWidth, nSendH = nHeight;
 			if (nWidth > nMaxSide || nHeight > nMaxSide)
 			{
@@ -1761,28 +1762,24 @@ void CPageAnnotate::StartAiAnnotateImage()
 			else
 			{
 				std::wstring strPrompt;
-				strPrompt += L"你是图像目标检测标注员。请识别图片中所有清晰可见的目标，只输出一个 JSON 数组，不要输出任何解释，不要输出 markdown 代码块。\n";
-				strPrompt += L"每项格式：{\"class\":\"类别名\",\"bbox\":[x1,y1,x2,y2]}\n";
-				wchar_t szSize[160] = { 0 };
-				swprintf_s(szSize, ARRAYSIZE(szSize), L"bbox 是目标框在该图片中的像素坐标：x1,y1 为左上角，x2,y2 为右下角；图片宽 %ld 像素、高 %ld 像素。\n", nSendW, nSendH);
+				strPrompt += L"只输出JSON数组，不要解释或代码块。格式：{\"class\":\"类别\",\"bbox\":[x1,y1,x2,y2]}，bbox为像素坐标，图片宽 ";
+				wchar_t szSize[64] = { 0 };
+				swprintf_s(szSize, ARRAYSIZE(szSize), L"%ld 高 %ld。", nSendW, nSendH);
 				strPrompt += szSize;
 				if (!strClassesHint.empty())
-				{
-					strPrompt += L"只允许标注以下类别：" + strClassesHint + L"。\n";
-					strPrompt += L"严格忽略界面元素（小地图、任务面板、技能栏、状态栏、聊天框、按钮、图标等）和背景环境（天空、云朵、远山、水面、沙滩、草地、树木、栅栏、石头等），除非它们明确属于上述类别。\n";
-					strPrompt += L"不属于上述类别的目标一律不要输出。没有符合的目标时输出 []。";
-				}
+					strPrompt += L"只标类别：" + strClassesHint + L"；忽略UI（小地图、状态栏、按钮等）与背景（天空、山水、树木等）；没有符合目标输出 []。";
 				else
-				{
-					strPrompt += L"当前没有预设类别，可自由命名，但只标注游戏中可交互或可识别的目标对象，忽略界面元素与背景环境。没有目标时输出 []。";
-				}
+					strPrompt += L"只标游戏中的目标对象，忽略UI与背景；没有目标输出 []。";
 
 				std::wstring strBody;
 				strBody += L"{\"model\":\"";
 				strBody += JsonEscape(strModel);
-				strBody += L"\",\"temperature\":0.1,\"max_tokens\":4096";
-				// 豆包/方舟默认开启深度思考，标注任务关掉以加快速度并保证直接输出 JSON
-				if (strUrl.find(L"volces.com") != std::wstring::npos)
+				strBody += L"\",\"temperature\":0.1,\"max_tokens\":";
+				// DeepSeek 默认推理量较大，给足输出上限，避免推理占满额度导致正文为空
+				strBody += (strUrl.find(L"api.deepseek.com") != std::wstring::npos) ? L"8192" : L"4096";
+				// 豆包/DeepSeek 默认开启思考模式，标注任务关掉以大幅减少推理 token
+				if (strUrl.find(L"volces.com") != std::wstring::npos ||
+					strUrl.find(L"api.deepseek.com") != std::wstring::npos)
 					strBody += L",\"thinking\":{\"type\":\"disabled\"}";
 				strBody += L",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"";
 				strBody += JsonEscape(strPrompt);
@@ -1908,31 +1905,36 @@ void CPageAnnotate::HandleAiResult(AiAnnotateResult* pResult)
 			nWritten++;
 		}
 
+		// 只有标注成功才写标签：零框且无过滤说明模型确认无目标；全部被过滤则不写，保留重试
+		bool bWriteLabel = (nWritten > 0) || (nSkipped == 0);
 		CString strLabel = GetLabelPathFor(strImg);
-		if (!WriteUtf8File(strLabel, strContent))
+		if (bWriteLabel && !WriteUtf8File(strLabel, strContent))
 			AppendLog(_T("标签写入失败: ") + strLabel + _T("\r\n"));
 
-		CString strLog;
-		if (nWritten == 0)
-			strLog.Format(_T("[AI %d/%d] %s -> 未检测到符合类别的目标"),
-				m_nAiIndex + 1, nTotal, szName);
-		else
-			strLog.Format(_T("[AI %d/%d] %s -> %d 个框"),
-				m_nAiIndex + 1, nTotal, szName, nWritten);
+		CString strSkip;
 		if (nSkipped > 0)
 		{
-			CString strExtra;
-			strExtra.Format(_T("（已过滤 %d 个非类别表目标"), nSkipped);
+			strSkip.Format(_T("（已过滤 %d 个非类别表目标"), nSkipped);
 			for (INT_PTR k = 0; k < arrSkipNames.GetSize() && k < 5; k++)
 			{
-				strExtra += (k == 0) ? _T(": ") : _T("、");
-				strExtra += arrSkipNames[k];
+				strSkip += (k == 0) ? _T(": ") : _T("、");
+				strSkip += arrSkipNames[k];
 			}
 			if (arrSkipNames.GetSize() > 5)
-				strExtra += _T("等");
-			strExtra += _T("）");
-			strLog += strExtra;
+				strSkip += _T("等");
+			strSkip += _T("）");
 		}
+
+		CString strLog;
+		if (!bWriteLabel)
+			strLog.Format(_T("[AI %d/%d] %s -> 未写入标签%s，可重试"),
+				m_nAiIndex + 1, nTotal, szName, (LPCTSTR)strSkip);
+		else if (nWritten == 0)
+			strLog.Format(_T("[AI %d/%d] %s -> 未检测到目标（已写入空标签）"),
+				m_nAiIndex + 1, nTotal, szName);
+		else
+			strLog.Format(_T("[AI %d/%d] %s -> %d 个框%s"),
+				m_nAiIndex + 1, nTotal, szName, nWritten, (LPCTSTR)strSkip);
 		strLog += _T("\r\n");
 		AppendLog(strLog);
 	}
