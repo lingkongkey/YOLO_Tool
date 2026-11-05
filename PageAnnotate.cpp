@@ -581,6 +581,8 @@ static bool ParseAiBoxes(const std::wstring& strContent, LONG nWidth, LONG nHeig
 		const JsonValue* bb = item.Get(L"bbox");
 		if (bb == NULL)
 			bb = item.Get(L"box");
+		if (bb == NULL)
+			bb = item.Get(L"position");
 		if (bb != NULL)
 		{
 			double vals[4] = { 0, 0, 0, 0 };
@@ -635,7 +637,7 @@ struct AiPreset { LPCTSTR szName; LPCTSTR szBase; LPCTSTR szModel; };
 static const AiPreset g_aiPresets[] =
 {
 	{ _T("豆包(火山引擎)"), _T("https://ark.cn-beijing.volces.com/api/v3"),           _T("doubao-seed-2-1-pro-260628") },
-	{ _T("通义千问(阿里)"), _T("https://dashscope.aliyuncs.com/compatible-mode/v1"),  _T("qwen-vl-max") },
+	{ _T("通义千问(阿里)"), _T("https://dashscope.aliyuncs.com/compatible-mode/v1"),  _T("qwen3-vl-plus") },
 	{ _T("智谱GLM"),        _T("https://open.bigmodel.cn/api/paas/v4"),               _T("glm-4v-flash") },
 	{ _T("OpenAI"),         _T("https://api.openai.com/v1"),                          _T("gpt-4o-mini") },
 	{ _T("DeepSeek"),       _T("https://api.deepseek.com/v1"),                        _T("deepseek-flash") },
@@ -1743,7 +1745,10 @@ void CPageAnnotate::StartAiAnnotateImage()
 		}
 		else
 		{
-			const LONG nMaxSide = 1024;
+			// 坐标已统一为 0-1000 归一化，上传尺寸只影响识别精度；DeepSeek 用 768 最省 token
+			LONG nMaxSide = 1024;
+			if (strUrl.find(L"api.deepseek.com") != std::wstring::npos)
+				nMaxSide = 768;
 			LONG nSendW = nWidth, nSendH = nHeight;
 			if (nWidth > nMaxSide || nHeight > nMaxSide)
 			{
@@ -1762,10 +1767,7 @@ void CPageAnnotate::StartAiAnnotateImage()
 			else
 			{
 				std::wstring strPrompt;
-				strPrompt += L"只输出JSON数组，不要解释或代码块。格式：{\"class\":\"类别\",\"bbox\":[x1,y1,x2,y2]}，bbox为像素坐标，图片宽 ";
-				wchar_t szSize[64] = { 0 };
-				swprintf_s(szSize, ARRAYSIZE(szSize), L"%ld 高 %ld。", nSendW, nSendH);
-				strPrompt += szSize;
+				strPrompt += L"只输出JSON数组，不要解释或代码块。格式：{\"class\":\"类别\",\"bbox\":[x1,y1,x2,y2]}，bbox为0-1000归一化坐标。";
 				if (!strClassesHint.empty())
 					strPrompt += L"只标类别：" + strClassesHint + L"；忽略UI（小地图、状态栏、按钮等）与背景（天空、山水、树木等）；没有符合目标输出 []。";
 				else
@@ -1785,7 +1787,13 @@ void CPageAnnotate::StartAiAnnotateImage()
 				strBody += JsonEscape(strPrompt);
 				strBody += L"\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,";
 				strBody.append(strBase64.begin(), strBase64.end());
-				strBody += L"\"}}]}]}";
+				strBody += L"\"";
+				// 豆包/千问/DeepSeek 支持低精度图片，可大幅降低图片 token
+				if (strUrl.find(L"volces.com") != std::wstring::npos ||
+					strUrl.find(L"dashscope.aliyuncs.com") != std::wstring::npos ||
+					strUrl.find(L"api.deepseek.com") != std::wstring::npos)
+					strBody += L",\"detail\":\"low\"";
+				strBody += L"}}]}]}";
 
 				std::string strUtf8;
 				int nUtf8Len = ::WideCharToMultiByte(CP_UTF8, 0, strBody.c_str(), (int)strBody.size(), NULL, 0, NULL, NULL);
@@ -1818,9 +1826,15 @@ void CPageAnnotate::StartAiAnnotateImage()
 					CStringW strBodyW(CA2W(vecResp.data(), CP_UTF8));
 					std::wstring strBodyWs = (LPCWSTR)strBodyW;
 					std::wstring strContent, strErr;
+					LONG nCoordW = 1000, nCoordH = 1000;
+					if (strUrl.find(L"api.openai.com") != std::wstring::npos)
+					{
+						nCoordW = nSendW;
+						nCoordH = nSendH;
+					}
 					if (!ExtractAiContent(strBodyWs, strContent, strErr))
 						pRes->strError = strErr;
-					else if (!ParseAiBoxes(strContent, nSendW, nSendH, pRes->boxes, strErr))
+					else if (!ParseAiBoxes(strContent, nCoordW, nCoordH, pRes->boxes, strErr))
 					{
 						std::wstring strRaw = strContent;
 						if (strRaw.size() > 200)
