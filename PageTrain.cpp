@@ -252,7 +252,9 @@ void CPageTrain::RefreshEpochsDefault()
 	if (!strCur.IsEmpty() && strCur != strLast)
 		return;
 	CString strNew;
-
+	strNew.Format(_T("%d"), nCount);
+	SetDlgItemText(IDC_EDIT_EPOCHS, strNew);
+	m_nLastEpochsDefault = nCount;
 }
 
 
