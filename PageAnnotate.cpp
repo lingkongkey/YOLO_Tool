@@ -1793,8 +1793,7 @@ void CPageAnnotate::StartAiAnnotateImage()
 				else
 					strBody += L"4096";
 				// DeepSeek 默认开启思考模式，标注任务关掉以大幅减少推理 token；
-				// 豆包关闭思考后漏检整类小目标，保持默认思考；
-				// GLM 不发 thinking 参数：其 thinking 系列模型不支持关闭（报 1210），普通视觉模型本就不需要
+				// 豆包参数与千问对齐，不发 thinking 参数；GLM 亦不发（其 thinking 系列模型不支持关闭，报 1210）
 				if (strUrl.find(L"api.deepseek.com") != std::wstring::npos)
 					strBody += L",\"thinking\":{\"type\":\"disabled\"}";
 				strBody += L",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"";
@@ -1802,8 +1801,9 @@ void CPageAnnotate::StartAiAnnotateImage()
 				strBody += L"\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,";
 				strBody.append(strBase64.begin(), strBase64.end());
 				strBody += L"\"";
-				// 千问支持低精度图片，可大幅降低图片 token；豆包/DeepSeek 在低精度下漏检整类小目标（乌龟/蜗牛），保持原始精度
-				if (strUrl.find(L"dashscope.aliyuncs.com") != std::wstring::npos)
+				// 豆包/千问支持低精度图片，可大幅降低图片 token；DeepSeek 在低精度下完全检不出目标，保持原始精度
+				if (strUrl.find(L"volces.com") != std::wstring::npos ||
+					strUrl.find(L"dashscope.aliyuncs.com") != std::wstring::npos)
 					strBody += L",\"detail\":\"low\"";
 				strBody += L"}}]}]}";
 
