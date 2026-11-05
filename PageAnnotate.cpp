@@ -638,7 +638,7 @@ static const AiPreset g_aiPresets[] =
 {
 	{ _T("豆包(火山引擎)"), _T("https://ark.cn-beijing.volces.com/api/v3"),           _T("doubao-seed-2-1-pro-260628") },
 	{ _T("通义千问(阿里)"), _T("https://dashscope.aliyuncs.com/compatible-mode/v1"),  _T("qwen3-vl-plus") },
-	{ _T("智谱GLM"),        _T("https://open.bigmodel.cn/api/paas/v4"),               _T("glm-4.5v") },
+	{ _T("智谱GLM"),        _T("https://open.bigmodel.cn/api/paas/v4"),               _T("glm-4.6v") },
 	{ _T("DeepSeek"),       _T("https://api.deepseek.com/v1"),                        _T("deepseek-flash") },
 };
 static const int g_aiPresetCount = (int)(sizeof(g_aiPresets) / sizeof(g_aiPresets[0]));
@@ -1755,9 +1755,11 @@ void CPageAnnotate::StartAiAnnotateImage()
 		}
 		else
 		{
-			// 坐标已统一为 0-1000 归一化，上传尺寸只影响识别精度；千问在 640 下漏检明显，保持 1024
+			// 坐标已统一为 0-1000 归一化，上传尺寸只影响识别精度；千问/GLM/DeepSeek 在 640 下漏检明显，保持 1024
 			LONG nMaxSide = 640;
-			if (strUrl.find(L"dashscope.aliyuncs.com") != std::wstring::npos)
+			if (strUrl.find(L"dashscope.aliyuncs.com") != std::wstring::npos ||
+				strUrl.find(L"open.bigmodel.cn") != std::wstring::npos ||
+				strUrl.find(L"api.deepseek.com") != std::wstring::npos)
 				nMaxSide = 1024;
 			LONG nSendW = nWidth, nSendH = nHeight;
 			if (nWidth > nMaxSide || nHeight > nMaxSide)
@@ -1794,20 +1796,19 @@ void CPageAnnotate::StartAiAnnotateImage()
 					strBody += L"1024";
 				else
 					strBody += L"4096";
-				// 豆包/DeepSeek/智谱默认开启思考模式，标注任务关掉以大幅减少推理 token
+				// 豆包/DeepSeek 默认开启思考模式，标注任务关掉以大幅减少推理 token；
+				// GLM 不发 thinking 参数：其 thinking 系列模型不支持关闭（报 1210），普通视觉模型本就不需要
 				if (strUrl.find(L"volces.com") != std::wstring::npos ||
-					strUrl.find(L"api.deepseek.com") != std::wstring::npos ||
-					strUrl.find(L"open.bigmodel.cn") != std::wstring::npos)
+					strUrl.find(L"api.deepseek.com") != std::wstring::npos)
 					strBody += L",\"thinking\":{\"type\":\"disabled\"}";
 				strBody += L",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"";
 				strBody += JsonEscape(strPrompt);
 				strBody += L"\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,";
 				strBody.append(strBase64.begin(), strBase64.end());
 				strBody += L"\"";
-				// 豆包/千问/DeepSeek 支持低精度图片，可大幅降低图片 token
+				// 豆包/千问支持低精度图片，可大幅降低图片 token；DeepSeek 在低精度下完全检不出目标，保持原始精度
 				if (strUrl.find(L"volces.com") != std::wstring::npos ||
-					strUrl.find(L"dashscope.aliyuncs.com") != std::wstring::npos ||
-					strUrl.find(L"api.deepseek.com") != std::wstring::npos)
+					strUrl.find(L"dashscope.aliyuncs.com") != std::wstring::npos)
 					strBody += L",\"detail\":\"low\"";
 				strBody += L"}}]}]}";
 
@@ -1959,8 +1960,10 @@ void CPageAnnotate::HandleAiResult(AiAnnotateResult* pResult)
 			nWritten++;
 		}
 
-		// 只有标注成功才写标签：零框且无过滤说明模型确认无目标；全部被过滤则不写，保留重试
-		bool bWriteLabel = (nWritten > 0) || (nSkipped == 0);
+		// 只有标注成功才写标签：零框且无过滤说明模型确认无目标；全部被过滤则不写，保留重试。
+		// GLM 例外：其空结果多为漏检而非确认无目标，禁止写空标签，保留下次重试/换家标注的机会
+		bool bGlm = m_strAiBase.Find(_T("bigmodel.cn")) >= 0;
+		bool bWriteLabel = (nWritten > 0) || (nSkipped == 0 && !bGlm);
 		CString strLabel = GetLabelPathFor(strImg);
 		if (bWriteLabel && !WriteUtf8File(strLabel, strContent))
 			AppendLog(_T("标签写入失败: ") + strLabel + _T("\r\n"));
