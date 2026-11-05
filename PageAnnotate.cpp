@@ -658,7 +658,16 @@ BOOL CPageAnnotate::OnInitDialog()
 		for (int i = 0; i < g_aiPresetCount; i++)
 			pProvider->AddString(g_aiPresets[i].szName);
 
+		// 默认服务商锚定为豆包：按名称查找而非硬编码下标，防止调整预设顺序后默认值跑偏
 		int nSel = 0;
+		for (int i = 0; i < g_aiPresetCount; i++)
+		{
+			if (_tcsstr(g_aiPresets[i].szName, _T("豆包")) != NULL)
+			{
+				nSel = i;
+				break;
+			}
+		}
 		if (!cfg.strAiProvider.IsEmpty())
 		{
 			for (int i = 0; i < g_aiPresetCount; i++)
@@ -1171,6 +1180,7 @@ bool CPageAnnotate::LoadImageAt(int nIndex, bool bKeepListSelection)
 		UpdateAnnoStatus();
 		return true;
 	}
+	return false;
 }
 
 int CPageAnnotate::GetSelectedCount()
