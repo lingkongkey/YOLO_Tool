@@ -97,6 +97,7 @@
 #define IDC_STATIC_TEST_ZOOM            1180
 #define IDC_PREVIEW_TEST                1181
 #define IDC_STATIC_TEST_STATUS          1182
+#define IDC_BTN_TEST_IMAGE              1185
 #define IDC_LBL_AI_KEY                  1156
 #define IDC_EDIT_AI_KEY                 1157
 #define IDC_BTN_AI_ANNOTATE             1158

@@ -396,11 +396,11 @@ void CPageAnnotate::Layout()
 	mv(IDC_BTN_REFRESH, M + 20 + bw * 2, by, bw, 26);
 
 	mv(IDC_LBL_AI_KEY, centerX, M + 5, 40, 14);
-	mv(IDC_EDIT_AI_KEY, centerX + 42, M, 280, 22);
-	mv(IDC_COMBO_AI_PROVIDER, centerX + 248 + 80, M, 112, 200);
-	mv(IDC_LBL_AI_MODEL, centerX + 368 + 80, M + 5, 32, 14);
-	mv(IDC_EDIT_AI_MODEL, centerX + 400 + 80, M, 200, 22);
-	mv(IDC_BTN_AI_ANNOTATE, centerX + 606 + 80, M, 88, 22);
+	mv(IDC_EDIT_AI_KEY, centerX + 42, M, 350, 22);
+	mv(IDC_COMBO_AI_PROVIDER, centerX + 398, M, 112, 200);
+	mv(IDC_LBL_AI_MODEL, centerX + 518 , M + 5, 32, 14);
+	mv(IDC_EDIT_AI_MODEL, centerX + 550 , M, 200, 22);
+	mv(IDC_BTN_AI_ANNOTATE, centerX + 756 , M, 88, 22);
 
 
 	mv(IDC_BTN_ZOOM_IN, centerX, M + AIH, 60, 28);

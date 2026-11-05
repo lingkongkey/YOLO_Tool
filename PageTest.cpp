@@ -38,6 +38,7 @@ BEGIN_MESSAGE_MAP(CPageTest, CDialogEx)
 	ON_BN_CLICKED(IDC_BTN_TEST_OPEN, &CPageTest::OnBnClickedBtnTestOpen)
 	ON_BN_CLICKED(IDC_BTN_TEST_REFRESH, &CPageTest::OnBnClickedBtnTestRefresh)
 	ON_BN_CLICKED(IDC_BTN_TEST_DETECT, &CPageTest::OnBnClickedBtnTestDetect)
+	ON_BN_CLICKED(IDC_BTN_TEST_IMAGE, &CPageTest::OnBnClickedBtnTestImage)
 	ON_CBN_SELCHANGE(IDC_COMBO_TEST_MODEL, &CPageTest::OnCbnSelchangeComboTestModel)
 	ON_MESSAGE(WM_FINDER_PICKED, &CPageTest::OnFinderPicked)
 	ON_WM_HELPINFO()
@@ -151,7 +152,9 @@ void CPageTest::Layout()
 	mv(IDC_EDIT_TEST_HANDLE, x, ROW2, 76, CH);
 	x += 76 + 10;
 	mv(IDC_BTN_TEST_DETECT, x, ROW2, 56, CH);
-	x += 56 + 10;
+	x += 56 + 6;
+	mv(IDC_BTN_TEST_IMAGE, x, ROW2, 68, CH);
+	x += 68 + 10;
 	mv(IDC_LBL_TEST_CONF, x, ROW2 + 6, 48, 14);
 	x += 48 + 4;
 	mv(IDC_EDIT_TEST_CONF, x, ROW2, 42, CH);
@@ -380,6 +383,31 @@ void CPageTest::OnBnClickedBtnTestDetect()
 	StartDetect();
 }
 
+void CPageTest::OnBnClickedBtnTestImage()
+{
+	StartImageDetect();
+}
+
+void CPageTest::ReadDetectParams(int& nImgsz, double& dConf, double& dIou)
+{
+	CString strTmp;
+
+	nImgsz = 640;
+	GetDlgItemText(IDC_EDIT_TEST_IMGSZ, strTmp);
+	int n = _ttoi(strTmp);
+	if (n >= 64 && n <= 4096) nImgsz = n;
+
+	dConf = 0.25;
+	GetDlgItemText(IDC_EDIT_TEST_CONF, strTmp);
+	double d = _tcstod(strTmp, NULL);
+	if (d > 0.0 && d <= 1.0) dConf = d;
+
+	dIou = 0.45;
+	GetDlgItemText(IDC_EDIT_TEST_IOU, strTmp);
+	d = _tcstod(strTmp, NULL);
+	if (d > 0.0 && d <= 1.0) dIou = d;
+}
+
 void CPageTest::StartDetect()
 {
 	CString strModel = GetSelectedModel();
@@ -411,30 +439,77 @@ void CPageTest::StartDetect()
 		return;
 	}
 
-	CString strTmp;
-	int nImgsz = 0;
-	GetDlgItemText(IDC_EDIT_TEST_IMGSZ, strTmp);
-	nImgsz = _ttoi(strTmp);
-	if (nImgsz < 64 || nImgsz > 4096) nImgsz = 640;
-
-	double dConf = 0.25;
-	GetDlgItemText(IDC_EDIT_TEST_CONF, strTmp);
-	dConf = _tcstod(strTmp, NULL);
-	if (dConf <= 0.0 || dConf > 1.0) dConf = 0.25;
-
-	double dIou = 0.45;
-	GetDlgItemText(IDC_EDIT_TEST_IOU, strTmp);
-	dIou = _tcstod(strTmp, NULL);
-	if (dIou <= 0.0 || dIou > 1.0) dIou = 0.45;
-
-	m_ullResultTime = 0;
-	::DeleteFile(m_strResultPath);
-	m_wndPreview.SetImage(NULL);
+	int nImgsz = 640;
+	double dConf = 0.25, dIou = 0.45;
+	ReadDetectParams(nImgsz, dConf, dIou);
 
 	CString strCmd;
 	strCmd.Format(_T("\"%s\" \"%s\" --weights \"%s\" --hwnd 0x%I64X --imgsz %d --conf %.2f --iou %.2f --mode single --out \"%s\""),
 		(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strModel,
 		(unsigned __int64)(UINT_PTR)hwnd, nImgsz, dConf, dIou, (LPCTSTR)m_strResultPath);
+
+	ExecuteInference(strCmd, strGreen);
+}
+
+void CPageTest::StartImageDetect()
+{
+	CString strModel = GetSelectedModel();
+	if (strModel.IsEmpty())
+	{
+		AfxMessageBox(_T("请先选择模型（可点「刷新」重新扫描 models 目录）。"), MB_ICONWARNING);
+		return;
+	}
+	SaveLastModel();
+
+	CString strGreen = GetGreenRoot();
+	CString strPython = GetGreenPython();
+	CString strScript = strGreen + _T("\\scripts\\infer_ui.py");
+	if (strGreen.IsEmpty() || !::PathFileExists(strPython) || !::PathFileExists(strScript))
+	{
+		AfxMessageBox(_T("未找到 scripts\\infer_ui.py，请检查绿色包是否完整。"), MB_ICONWARNING);
+		SetStatus(_T("就绪"));
+		return;
+	}
+
+	if (m_strResultPath.IsEmpty())
+	{
+		AfxMessageBox(_T("未找到输出目录，请检查绿色包是否完整。"), MB_ICONWARNING);
+		SetStatus(_T("就绪"));
+		return;
+	}
+
+	CFileDialog dlg(TRUE, _T("jpg"), NULL,
+		OFN_FILEMUSTEXIST | OFN_HIDEREADONLY,
+		_T("图片文件 (*.jpg;*.jpeg;*.png;*.bmp)|*.jpg;*.jpeg;*.png;*.bmp|所有文件 (*.*)|*.*||"), this);
+
+	CString strInitDir = GetProjectImagesDir();
+	if (!::PathIsDirectory(strInitDir))
+		strInitDir = GetProjectRoot();
+	if (::PathIsDirectory(strInitDir))
+		dlg.m_ofn.lpstrInitialDir = (LPCTSTR)strInitDir;
+
+	if (dlg.DoModal() != IDOK)
+		return;
+
+	CString strImage = dlg.GetPathName();
+
+	int nImgsz = 640;
+	double dConf = 0.25, dIou = 0.45;
+	ReadDetectParams(nImgsz, dConf, dIou);
+
+	CString strCmd;
+	strCmd.Format(_T("\"%s\" \"%s\" --weights \"%s\" --image \"%s\" --imgsz %d --conf %.2f --iou %.2f --out \"%s\""),
+		(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strModel,
+		(LPCTSTR)strImage, nImgsz, dConf, dIou, (LPCTSTR)m_strResultPath);
+
+	ExecuteInference(strCmd, strGreen);
+}
+
+void CPageTest::ExecuteInference(const CString& strCmd, const CString& strGreen)
+{
+	m_ullResultTime = 0;
+	::DeleteFile(m_strResultPath);
+	m_wndPreview.SetImage(NULL);
 
 	SetRunning(true);
 	SetStatus(_T("检测中..."));
@@ -480,7 +555,7 @@ void CPageTest::SetRunning(bool bRunning)
 
 	BOOL bEnable = bRunning ? FALSE : TRUE;
 	UINT ids[] = {
-		IDC_COMBO_TEST_MODEL, IDC_BTN_TEST_OPEN, IDC_BTN_TEST_REFRESH,
+		IDC_COMBO_TEST_MODEL, IDC_BTN_TEST_OPEN, IDC_BTN_TEST_REFRESH, IDC_BTN_TEST_IMAGE,
 		IDC_EDIT_TEST_IMGSZ, IDC_EDIT_TEST_HANDLE, IDC_FINDER_TEST,
 		IDC_EDIT_TEST_CONF, IDC_EDIT_TEST_IOU
 	};
