@@ -1631,7 +1631,6 @@ void CPageAnnotate::OnCbnSelchangeComboAiProvider()
 	if (nSel >= 0 && nSel < g_aiPresetCount)
 	{
 		SetDlgItemText(IDC_EDIT_AI_MODEL, g_aiPresets[nSel].szModel);
-		// 切换服务商后清空上一家的 Key，避免用 A 家的 Key 请求 B 家接口
 		SetDlgItemText(IDC_EDIT_AI_KEY, _T(""));
 	}
 }
@@ -1720,13 +1719,13 @@ void CPageAnnotate::StartAiAnnotateImage()
 	std::wstring strKey = (LPCTSTR)m_strAiKey;
 	std::wstring strModel = (LPCTSTR)m_strAiModel;
 
-	// 组装 OpenAI 兼容接口地址（豆包火山方舟同样使用 chat/completions）
+
 	std::wstring strUrl = (LPCTSTR)m_strAiBase;
 	while (!strUrl.empty() && (strUrl[strUrl.size() - 1] == L'/' || strUrl[strUrl.size() - 1] == L' '))
 		strUrl.erase(strUrl.size() - 1);
 	strUrl += L"/chat/completions";
 
-	// 已有类别作为提示，降低模型乱造类别名的概率
+	
 	std::wstring strClassesHint;
 	CStringArray arrNames;
 	ParseClassNames(arrNames);
@@ -1741,7 +1740,7 @@ void CPageAnnotate::StartAiAnnotateImage()
 	int nIndex = m_nAiIndex;
 	int nRunId = m_nAiRunId;
 
-	// 网络请求放到后台线程，避免界面卡死
+
 	std::thread([hWnd, nIndex, nRunId, strImgPath, strKey, strUrl, strModel, strClassesHint]()
 	{
 		AiAnnotateResult* pRes = new AiAnnotateResult();
@@ -1755,7 +1754,6 @@ void CPageAnnotate::StartAiAnnotateImage()
 		}
 		else
 		{
-			// 坐标已统一为 0-1000 归一化，上传尺寸只影响识别精度；实测 640 下各服务商均漏检明显（豆包框偏松/多目标合并），统一按 1024 上传
 			LONG nMaxSide = 1024;
 			LONG nSendW = nWidth, nSendH = nHeight;
 			if (nWidth > nMaxSide || nHeight > nMaxSide)

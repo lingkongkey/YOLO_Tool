@@ -556,7 +556,7 @@ void CPageTrain::StartExport()
 		return;
 	}
 
-	bool bUseGpu = !GetGreenGpuRoot().IsEmpty();
+	bool bUseGpu = (IsDlgButtonChecked(IDC_CHK_GPU) == BST_CHECKED);
 	CString strGreen = bUseGpu ? GetGreenGpuRoot() : GetGreenRoot();
 	CString strPython = bUseGpu ? GetGreenGpuPython() : GetGreenPython();
 
@@ -650,7 +650,7 @@ bool CPageTrain::StartKeyoloPack()
 		int nDot = strStem.ReverseFind(_T('.'));
 		if (nDot > 0)
 			strStem = strStem.Left(nDot);
-		strNcnnDir = strStem + _T("_ncnn_model");
+		strNcnnDir = strStem + _T("_ncnn");
 	}
 
 	if (!::PathIsDirectory(strNcnnDir))
@@ -660,7 +660,7 @@ bool CPageTrain::StartKeyoloPack()
 		if (!strDir.IsEmpty())
 		{
 			CFileFind finder;
-			BOOL bMore = finder.FindFile(strDir + _T("*_ncnn_model"));
+			BOOL bMore = finder.FindFile(strDir + _T("*_ncnn"));
 			while (bMore)
 			{
 				bMore = finder.FindNextFile();

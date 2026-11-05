@@ -79,13 +79,10 @@ std::string _MyIniPuls::GetIniDLLpat()
 {
 	std::string iniPath;
 
-#if _WIN64
+
 	iniPath = QuYunxunmul();
-	iniPath += "\\X64Pulg";
-#else
-	iniPath = QuYunxunmul();
-	iniPath += "\\X86Pulg";
-#endif
+	iniPath += "\\pulg";
+
 
 
 	if (!file_exist(iniPath)) 
