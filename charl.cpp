@@ -222,7 +222,9 @@ std::string ImageToJpegBase64(LPCTSTR szPath, LONG nMaxLongSide = 1280, ULONG nQ
 		DWORD outLen = 0;
 		CryptBinaryToStringA(pData, bufLen, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, NULL, &outLen);
 		b64.resize(outLen);
-		CryptBinaryToStringA(pData, bufLen, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, (LPSTR)b64.c_str(), &outLen);
+		// 第二次调用后 outLen 返回实际写入的字符数（不含 NUL 终止符），收缩掉尾部 \0，避免 JSON 中出现控制字符
+		CryptBinaryToStringA(pData, bufLen, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, &b64[0], &outLen);
+		b64.resize(outLen);
 	}
 
 	GlobalUnlock(hGlobal);
