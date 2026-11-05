@@ -640,7 +640,6 @@ static const AiPreset g_aiPresets[] =
 	{ _T("通义千问(阿里)"), _T("https://dashscope.aliyuncs.com/compatible-mode/v1"),  _T("qwen3-vl-plus") },
 	{ _T("智谱GLM"),        _T("https://open.bigmodel.cn/api/paas/v4"),               _T("glm-4.5v") },
 	{ _T("DeepSeek"),       _T("https://api.deepseek.com/v1"),                        _T("deepseek-flash") },
-	{ _T("Kimi(月之暗面)"), _T("https://api.moonshot.cn/v1"),                        _T("kimi-k3.1-pro") },
 };
 static const int g_aiPresetCount = (int)(sizeof(g_aiPresets) / sizeof(g_aiPresets[0]));
 
@@ -1776,20 +1775,12 @@ void CPageAnnotate::StartAiAnnotateImage()
 				std::wstring strBody;
 				strBody += L"{\"model\":\"";
 				strBody += JsonEscape(strModel);
-				strBody += L"\",\"temperature\":";
-				// Kimi 只允许 temperature 为 1
-				if (strUrl.find(L"api.moonshot.cn") != std::wstring::npos)
-					strBody += L"1";
-				else
-					strBody += L"0.1";
-				strBody += L",\"max_tokens\":";
+				strBody += L"\",\"temperature\":0.1,\"max_tokens\":";
 				// DeepSeek 默认推理量较大，给足输出上限；智谱限制最大 1024
 				if (strUrl.find(L"api.deepseek.com") != std::wstring::npos)
 					strBody += L"8192";
 				else if (strUrl.find(L"open.bigmodel.cn") != std::wstring::npos)
 					strBody += L"1024";
-				else if (strUrl.find(L"api.moonshot.cn") != std::wstring::npos)
-					strBody += L"2048";
 				else
 					strBody += L"4096";
 				// 豆包/DeepSeek/智谱默认开启思考模式，标注任务关掉以大幅减少推理 token
