@@ -636,9 +636,9 @@ static bool ParseAiBoxes(const std::wstring& strContent, LONG nWidth, LONG nHeig
 struct AiPreset { LPCTSTR szName; LPCTSTR szBase; LPCTSTR szModel; };
 static const AiPreset g_aiPresets[] =
 {
-	{ _T("豆包(火山引擎)"), _T("https://ark.cn-beijing.volces.com/api/v3"),           _T("doubao-seed-2-1-pro-260628") },
-	{ _T("通义千问(阿里)"), _T("https://dashscope.aliyuncs.com/compatible-mode/v1"),  _T("qwen3-vl-plus") },
-	{ _T("智谱GLM"),        _T("https://open.bigmodel.cn/api/paas/v4"),               _T("glm-4.6v") },
+	{ _T("豆包"), _T("https://ark.cn-beijing.volces.com/api/v3"),           _T("doubao-seed-2-1-pro-260628") },
+	{ _T("通义千问"), _T("https://dashscope.aliyuncs.com/compatible-mode/v1"),  _T("qwen3-vl-plus") },
+	{ _T("GLM"),        _T("https://open.bigmodel.cn/api/paas/v4"),               _T("glm-4.6v") },
 	{ _T("DeepSeek"),       _T("https://api.deepseek.com/v1"),                        _T("deepseek-flash") },
 };
 static const int g_aiPresetCount = (int)(sizeof(g_aiPresets) / sizeof(g_aiPresets[0]));
@@ -1755,12 +1755,8 @@ void CPageAnnotate::StartAiAnnotateImage()
 		}
 		else
 		{
-			// 坐标已统一为 0-1000 归一化，上传尺寸只影响识别精度；千问/GLM/DeepSeek 在 640 下漏检明显，保持 1024
-			LONG nMaxSide = 640;
-			if (strUrl.find(L"dashscope.aliyuncs.com") != std::wstring::npos ||
-				strUrl.find(L"open.bigmodel.cn") != std::wstring::npos ||
-				strUrl.find(L"api.deepseek.com") != std::wstring::npos)
-				nMaxSide = 1024;
+			// 坐标已统一为 0-1000 归一化，上传尺寸只影响识别精度；实测 640 下各服务商均漏检明显（豆包框偏松/多目标合并），统一按 1024 上传
+			LONG nMaxSide = 1024;
 			LONG nSendW = nWidth, nSendH = nHeight;
 			if (nWidth > nMaxSide || nHeight > nMaxSide)
 			{
