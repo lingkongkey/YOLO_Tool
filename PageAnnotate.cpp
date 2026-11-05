@@ -13,6 +13,10 @@
 #include <shellapi.h>
 #pragma comment(lib, "shlwapi.lib")
 
+
+extern std::vector<char> HttpPost(const std::wstring& wstrUrl, const char* pUtf8Body, DWORD dwBodyLen, const std::wstring& wstrAuthHeader, DWORD& dwCode);
+extern std::string ImageToJpegBase64(LPCTSTR szPath, LONG nMaxLongSide , ULONG nQuality);
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -1154,40 +1158,69 @@ void CPageAnnotate::OnBnClickedBtnAiAnnotate()
 
 void CPageAnnotate::StartAiAnnotateImage()
 {
-	CString strPython = GetGreenPython();
-	CString strGreen = GetGreenRoot();
 	CString strImg = m_arrAiTodo[m_nAiIndex];
 	m_vecAiBoxes.clear();
 	m_bAiGotResult = false;
 	m_bAiError = false;
 
-	CString strScript = strGreen + _T("\\scripts\\ai_annotate.py");
-	CString strClasses = GetProjectDatasetDir() + _T("\\classes.txt");
-
-	CString strCmd;
-	strCmd.Format(_T("\"%s\" -X utf8 -u \"%s\" --key \"%s\" --img \"%s\" --classes-file \"%s\" --base-url \"%s\" --model \"%s\""),
-		(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)m_strAiKey,
-		(LPCTSTR)strImg, (LPCTSTR)strClasses, (LPCTSTR)m_strAiBase, (LPCTSTR)m_strAiModel);
-
-	CString strShow = strCmd;
-	strShow.Replace(_T("--key \"") + m_strAiKey + _T("\""), _T("--key \"***\""));
-	AppendLog(strShow + _T("\r\n"));
-
-	if (!m_capture.StartProcess(strCmd, GetSafeHwnd()))
+	CString strBase64(ImageToJpegBase64(strImg, 640, 75).c_str());
+	if (strBase64.IsEmpty())
 	{
-		AppendLog(_T("创建 AI 标注进程失败。\r\n"));
-		m_bAiRunning = false;
-		SetAiRunningUI(false);
-		SetStatus(_T("AI 标注启动失败"));
+		AppendLog(_T("[AI] 图片读取或编码失败: ") + strImg + _T("\r\n"));
 		return;
 	}
 
-	TCHAR szName[MAX_PATH] = { 0 };
-	_tcsncpy_s(szName, strImg, _TRUNCATE);
-	::PathStripPath(szName);
+	CString strModel = m_strAiModel;
+	if (strModel.IsEmpty())
+		strModel = g_aiPresets[0].szModel;
+
+	CString postdata;
+	postdata.Format(
+		L"{"
+		L"\"model\": \"doubao-seed-evolving\","
+		L"\"input\": ["
+		L"{"
+		L"\"role\": \"user\","
+		L"\"content\": ["
+		L"{"
+		L"\"type\": \"input_image\","
+		L"\"image_url\": \"data:image/jpeg;base64,%ws\""
+		L"},"
+		L"{"
+		L"\"type\": \"input_text\","
+		L"\"text\": \"你是图像标注工具。识别图片中所有目标，只输出纯JSON数组，不要任何解释、不要markdown。每条格式：{\\\"label\\\":\\\"类别\\\",\\\"x1\\\":左上像素x,\\\"y1\\\":左上像素y,\\\"x2\\\":右下像素x,\\\"y2\\\":右下像素y}\""
+		L"}"
+		L"]"
+		L"}"
+		L"],"
+		L"\"temperature\":0.1,"
+		L"\"max_tokens\":2048"
+		L"}",
+		strBase64.GetString()
+	);
+	std::string bodyUtf8 = CW2A(postdata, CP_UTF8);
+
+	CString strUrl = L"https://ark.cn-beijing.volces.com/api/v3/responses";
+	CString Heade;
+	Heade.Format(L"Authorization: Bearer %ws\r\n", m_strAiKey);
+
+	DWORD dwCode = 0;
+	std::vector<char> t_data = HttpPost(strUrl.GetString(), bodyUtf8.c_str(), (DWORD)bodyUtf8.length(), Heade.GetString(), dwCode);
+
+	CString strResp;
+	if (t_data.empty())
+		strResp = _T("请求失败：网络错误、超时或无法连接服务器");
+	else if (dwCode != 200)
+	{
+		CString strBody = CA2W(t_data.data(), CP_UTF8);
+		strResp.Format(_T("HTTP %lu: %ws"), dwCode, (LPCTSTR)strBody);
+	}
+	else
+		strResp = CA2W(t_data.data(), CP_UTF8);
+
 	CString strStatus;
-	strStatus.Format(_T("AI 标注中 (%d/%d): %s"),
-		m_nAiIndex + 1, (int)m_arrAiTodo.GetSize(), szName);
+	strStatus.Format(_T("AI 标注中 (%d/%d): %ws"),
+		m_nAiIndex + 1, (int)m_arrAiTodo.GetSize(), strResp);
 	SetStatus(strStatus);
 }
 
