@@ -638,8 +638,7 @@ static const AiPreset g_aiPresets[] =
 {
 	{ _T("豆包(火山引擎)"), _T("https://ark.cn-beijing.volces.com/api/v3"),           _T("doubao-seed-2-1-pro-260628") },
 	{ _T("通义千问(阿里)"), _T("https://dashscope.aliyuncs.com/compatible-mode/v1"),  _T("qwen3-vl-plus") },
-	{ _T("智谱GLM"),        _T("https://open.bigmodel.cn/api/paas/v4"),               _T("glm-4v-flash") },
-	{ _T("OpenAI"),         _T("https://api.openai.com/v1"),                          _T("gpt-4o-mini") },
+	{ _T("智谱GLM"),        _T("https://open.bigmodel.cn/api/paas/v4"),               _T("glm-4.5v") },
 	{ _T("DeepSeek"),       _T("https://api.deepseek.com/v1"),                        _T("deepseek-flash") },
 };
 static const int g_aiPresetCount = (int)(sizeof(g_aiPresets) / sizeof(g_aiPresets[0]));
@@ -1745,10 +1744,10 @@ void CPageAnnotate::StartAiAnnotateImage()
 		}
 		else
 		{
-			// 坐标已统一为 0-1000 归一化，上传尺寸只影响识别精度；DeepSeek 用 768 最省 token
-			LONG nMaxSide = 1024;
-			if (strUrl.find(L"api.deepseek.com") != std::wstring::npos)
-				nMaxSide = 768;
+			// 坐标已统一为 0-1000 归一化，上传尺寸只影响识别精度；千问在 640 下漏检明显，保持 1024
+			LONG nMaxSide = 640;
+			if (strUrl.find(L"dashscope.aliyuncs.com") != std::wstring::npos)
+				nMaxSide = 1024;
 			LONG nSendW = nWidth, nSendH = nHeight;
 			if (nWidth > nMaxSide || nHeight > nMaxSide)
 			{
@@ -1777,11 +1776,17 @@ void CPageAnnotate::StartAiAnnotateImage()
 				strBody += L"{\"model\":\"";
 				strBody += JsonEscape(strModel);
 				strBody += L"\",\"temperature\":0.1,\"max_tokens\":";
-				// DeepSeek 默认推理量较大，给足输出上限，避免推理占满额度导致正文为空
-				strBody += (strUrl.find(L"api.deepseek.com") != std::wstring::npos) ? L"8192" : L"4096";
+				// DeepSeek 默认推理量较大，给足输出上限；智谱限制最大 1024
+				if (strUrl.find(L"api.deepseek.com") != std::wstring::npos)
+					strBody += L"8192";
+				else if (strUrl.find(L"open.bigmodel.cn") != std::wstring::npos)
+					strBody += L"1024";
+				else
+					strBody += L"4096";
 				// 豆包/DeepSeek 默认开启思考模式，标注任务关掉以大幅减少推理 token
 				if (strUrl.find(L"volces.com") != std::wstring::npos ||
-					strUrl.find(L"api.deepseek.com") != std::wstring::npos)
+					strUrl.find(L"api.deepseek.com") != std::wstring::npos ||
+					strUrl.find(L"open.bigmodel.cn") != std::wstring::npos)
 					strBody += L",\"thinking\":{\"type\":\"disabled\"}";
 				strBody += L",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"";
 				strBody += JsonEscape(strPrompt);
@@ -1826,15 +1831,9 @@ void CPageAnnotate::StartAiAnnotateImage()
 					CStringW strBodyW(CA2W(vecResp.data(), CP_UTF8));
 					std::wstring strBodyWs = (LPCWSTR)strBodyW;
 					std::wstring strContent, strErr;
-					LONG nCoordW = 1000, nCoordH = 1000;
-					if (strUrl.find(L"api.openai.com") != std::wstring::npos)
-					{
-						nCoordW = nSendW;
-						nCoordH = nSendH;
-					}
 					if (!ExtractAiContent(strBodyWs, strContent, strErr))
 						pRes->strError = strErr;
-					else if (!ParseAiBoxes(strContent, nCoordW, nCoordH, pRes->boxes, strErr))
+					else if (!ParseAiBoxes(strContent, 1000, 1000, pRes->boxes, strErr))
 					{
 						std::wstring strRaw = strContent;
 						if (strRaw.size() > 200)
