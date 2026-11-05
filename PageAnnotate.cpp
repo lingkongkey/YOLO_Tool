@@ -1616,7 +1616,11 @@ void CPageAnnotate::OnCbnSelchangeComboAiProvider()
 		return;
 	int nSel = pCombo->GetCurSel();
 	if (nSel >= 0 && nSel < g_aiPresetCount)
+	{
 		SetDlgItemText(IDC_EDIT_AI_MODEL, g_aiPresets[nSel].szModel);
+		// 切换服务商后清空上一家的 Key，避免用 A 家的 Key 请求 B 家接口
+		SetDlgItemText(IDC_EDIT_AI_KEY, _T(""));
+	}
 }
 
 void CPageAnnotate::OnBnClickedBtnAiAnnotate()
