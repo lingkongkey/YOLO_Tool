@@ -402,15 +402,14 @@ void CPageTrain::FillExportFormats()
 	if (pCombo == NULL)
 		return;
 	pCombo->ResetContent();
-	// Display format: "actual_value - Description"; parse before ' - ' to get --format value
-	pCombo->AddString(_T("ncnn - ncnn inference engine (C++)"));
-	pCombo->AddString(_T("keyolo - NCNN 打包 (.bin+.param → .keyolo)"));
-	pCombo->AddString(_T("onnx - ONNX / OpenCV DNN"));
-	pCombo->AddString(_T("torchscript - PyTorch JIT"));
-	pCombo->AddString(_T("engine - TensorRT"));
-	pCombo->AddString(_T("tflite - TensorFlow Lite"));
-	pCombo->AddString(_T("openvino - Intel OpenVINO"));
-	pCombo->AddString(_T("pb - TensorFlow Graph"));
+	pCombo->AddString(_T("NCNN"));
+	pCombo->AddString(_T("KEYOLO"));
+	pCombo->AddString(_T("ONNX"));
+	pCombo->AddString(_T("TorchScript"));
+	pCombo->AddString(_T("TensorRT"));
+	pCombo->AddString(_T("TFLite"));
+	pCombo->AddString(_T("OpenVINO"));
+	pCombo->AddString(_T("TensorFlow"));
 	pCombo->SetCurSel(0);
 }
 
@@ -588,11 +587,14 @@ void CPageTrain::StartExport()
 		return;
 	}
 
-	CString strFmtDisp;
-	pCombo->GetLBText(nSel, strFmtDisp);
-	int nDash = strFmtDisp.Find(_T(" - "));
-	CString strFormat = (nDash > 0) ? strFmtDisp.Left(nDash) : strFmtDisp;
+	CString strFormat;
+	pCombo->GetLBText(nSel, strFormat);
 	strFormat.Trim();
+	strFormat.MakeLower();
+	if (strFormat == _T("tensorrt"))
+		strFormat = _T("engine");
+	else if (strFormat == _T("tensorflow"))
+		strFormat = _T("pb");
 	if (strFormat.IsEmpty())
 	{
 		AppendLog(_T("导出格式解析失败\r\n"));
