@@ -634,7 +634,7 @@ static bool ParseAiBoxes(const std::wstring& strContent, LONG nWidth, LONG nHeig
 struct AiPreset { LPCTSTR szName; LPCTSTR szBase; LPCTSTR szModel; };
 static const AiPreset g_aiPresets[] =
 {
-	{ _T("豆包(火山引擎)"), _T("https://ark.cn-beijing.volces.com/api/v3"),           _T("doubao-seed-evolving") },
+	{ _T("豆包(火山引擎)"), _T("https://ark.cn-beijing.volces.com/api/v3"),           _T("doubao-seed-2-1-pro-260628") },
 	{ _T("通义千问(阿里)"), _T("https://dashscope.aliyuncs.com/compatible-mode/v1"),  _T("qwen-vl-max") },
 	{ _T("智谱GLM"),        _T("https://open.bigmodel.cn/api/paas/v4"),               _T("glm-4v-flash") },
 	{ _T("OpenAI"),         _T("https://api.openai.com/v1"),                          _T("gpt-4o-mini") },
