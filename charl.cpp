@@ -159,6 +159,16 @@ int GetEncoderClsid(const WCHAR* format, CLSID* pClsid)
 }
 
 
+bool GetImageSize(LPCTSTR szPath, LONG& nWidth, LONG& nHeight)
+{
+	Image img(szPath);
+	if (img.GetLastStatus() != Ok)
+		return false;
+	nWidth = (LONG)img.GetWidth();
+	nHeight = (LONG)img.GetHeight();
+	return nWidth > 0 && nHeight > 0;
+}
+
 std::string ImageToJpegBase64(LPCTSTR szPath, LONG nMaxLongSide = 1280, ULONG nQuality = 80)
 {
 	Image img(szPath);

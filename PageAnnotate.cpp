@@ -11,11 +11,14 @@
 #include <shlwapi.h>
 #include <shlobj.h>
 #include <shellapi.h>
+#include <thread>
+#include <memory>
 #pragma comment(lib, "shlwapi.lib")
 
 
 extern std::vector<char> HttpPost(const std::wstring& wstrUrl, const char* pUtf8Body, DWORD dwBodyLen, const std::wstring& wstrAuthHeader, DWORD& dwCode);
 extern std::string ImageToJpegBase64(LPCTSTR szPath, LONG nMaxLongSide , ULONG nQuality);
+extern bool GetImageSize(LPCTSTR szPath, LONG& nWidth, LONG& nHeight);
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -48,6 +51,7 @@ BEGIN_MESSAGE_MAP(CPageAnnotate, CDialogEx)
 	ON_MESSAGE(WM_ANNO_CHANGED, &CPageAnnotate::OnAnnoChanged)
 	ON_MESSAGE(WM_USER_RECVLOG, &CPageAnnotate::OnRecvLog)
 	ON_MESSAGE(WM_USER_PROC_EXIT, &CPageAnnotate::OnProcExit)
+	ON_MESSAGE(WM_USER_AI_RESULT, &CPageAnnotate::OnAiResult)
 
 	ON_WM_HELPINFO()
 END_MESSAGE_MAP()
@@ -97,11 +101,540 @@ static bool WriteUtf8File(const CString& strPath, const CString& strText)
 	return true;
 }
 
+// ===== 轻量 JSON 解析与转换（仅用于解析大模型返回，无第三方依赖） =====
+namespace
+{
+
+struct JsonValue
+{
+	enum Type { Null, Bool, Number, String, Array, Object } type = Null;
+	bool bValue = false;
+	double dValue = 0.0;
+	std::wstring str;
+	std::vector<JsonValue> arr;
+	std::vector<std::pair<std::wstring, JsonValue>> obj;
+
+	const JsonValue* Get(const wchar_t* lpszKey) const
+	{
+		if (type != Object)
+			return NULL;
+		for (size_t i = 0; i < obj.size(); i++)
+		{
+			if (obj[i].first == lpszKey)
+				return &obj[i].second;
+		}
+		return NULL;
+	}
+};
+
+class JsonParser
+{
+public:
+	explicit JsonParser(const std::wstring& strText) : m_strText(strText), m_nPos(0) {}
+
+	bool Parse(JsonValue& out)
+	{
+		SkipSpace();
+		if (!ParseValue(out, 0))
+			return false;
+		SkipSpace();
+		return true;
+	}
+
+private:
+	void SkipSpace()
+	{
+		while (m_nPos < m_strText.size())
+		{
+			wchar_t c = m_strText[m_nPos];
+			if (c == L' ' || c == L'\t' || c == L'\r' || c == L'\n')
+				m_nPos++;
+			else
+				break;
+		}
+	}
+
+	bool ReadHex4(unsigned int& out)
+	{
+		if (m_nPos + 4 > m_strText.size())
+			return false;
+		out = 0;
+		for (int i = 0; i < 4; i++)
+		{
+			wchar_t c = m_strText[m_nPos++];
+			unsigned int v;
+			if (c >= L'0' && c <= L'9')
+				v = (unsigned int)(c - L'0');
+			else if (c >= L'a' && c <= L'f')
+				v = (unsigned int)(c - L'a' + 10);
+			else if (c >= L'A' && c <= L'F')
+				v = (unsigned int)(c - L'A' + 10);
+			else
+				return false;
+			out = out * 16 + v;
+		}
+		return true;
+	}
+
+	bool ParseString(std::wstring& out)
+	{
+		if (m_nPos >= m_strText.size() || m_strText[m_nPos] != L'"')
+			return false;
+		m_nPos++;
+		out.clear();
+		while (m_nPos < m_strText.size())
+		{
+			wchar_t c = m_strText[m_nPos++];
+			if (c == L'"')
+				return true;
+			if (c != L'\\')
+			{
+				out += c;
+				continue;
+			}
+			if (m_nPos >= m_strText.size())
+				return false;
+			wchar_t e = m_strText[m_nPos++];
+			switch (e)
+			{
+			case L'"':  out += L'"';  break;
+			case L'\\': out += L'\\'; break;
+			case L'/':  out += L'/';  break;
+			case L'b':  out += L'\b'; break;
+			case L'f':  out += L'\f'; break;
+			case L'n':  out += L'\n'; break;
+			case L'r':  out += L'\r'; break;
+			case L't':  out += L'\t'; break;
+			case L'u':
+			{
+				unsigned int u = 0;
+				if (!ReadHex4(u))
+					return false;
+				if (u >= 0xD800 && u <= 0xDBFF && m_nPos + 6 <= m_strText.size() &&
+					m_strText[m_nPos] == L'\\' && m_strText[m_nPos + 1] == L'u')
+				{
+					size_t nSave = m_nPos;
+					m_nPos += 2;
+					unsigned int lo = 0;
+					if (ReadHex4(lo) && lo >= 0xDC00 && lo <= 0xDFFF)
+					{
+						out += (wchar_t)(0x10000 + ((u - 0xD800) << 10) + (lo - 0xDC00));
+						break;
+					}
+					m_nPos = nSave;
+				}
+				if (u < 0xD800 || u > 0xDFFF)
+					out += (wchar_t)u;
+				break;
+			}
+			default:
+				return false;
+			}
+		}
+		return false;
+	}
+
+	bool ParseNumber(JsonValue& out)
+	{
+		size_t nStart = m_nPos;
+		if (m_nPos < m_strText.size() && (m_strText[m_nPos] == L'-' || m_strText[m_nPos] == L'+'))
+			m_nPos++;
+		bool bDigit = false;
+		while (m_nPos < m_strText.size())
+		{
+			wchar_t c = m_strText[m_nPos];
+			if ((c >= L'0' && c <= L'9') || c == L'.' || c == L'e' || c == L'E' || c == L'-' || c == L'+')
+			{
+				if (c >= L'0' && c <= L'9')
+					bDigit = true;
+				m_nPos++;
+			}
+			else
+				break;
+		}
+		if (!bDigit)
+			return false;
+		out.type = JsonValue::Number;
+		out.dValue = wcstod(m_strText.c_str() + nStart, NULL);
+		return true;
+	}
+
+	bool ParseValue(JsonValue& out, int nDepth)
+	{
+		if (nDepth > 100)
+			return false;
+		SkipSpace();
+		if (m_nPos >= m_strText.size())
+			return false;
+
+		wchar_t c = m_strText[m_nPos];
+		if (c == L'"')
+		{
+			out.type = JsonValue::String;
+			return ParseString(out.str);
+		}
+		if (c == L'{')
+		{
+			m_nPos++;
+			out.type = JsonValue::Object;
+			SkipSpace();
+			if (m_nPos < m_strText.size() && m_strText[m_nPos] == L'}')
+			{
+				m_nPos++;
+				return true;
+			}
+			while (m_nPos < m_strText.size())
+			{
+				SkipSpace();
+				std::wstring strKey;
+				if (!ParseString(strKey))
+					return false;
+				SkipSpace();
+				if (m_nPos >= m_strText.size() || m_strText[m_nPos] != L':')
+					return false;
+				m_nPos++;
+				JsonValue val;
+				if (!ParseValue(val, nDepth + 1))
+					return false;
+				out.obj.push_back(std::make_pair(strKey, val));
+				SkipSpace();
+				if (m_nPos >= m_strText.size())
+					return false;
+				if (m_strText[m_nPos] == L',')
+				{
+					m_nPos++;
+					continue;
+				}
+				if (m_strText[m_nPos] == L'}')
+				{
+					m_nPos++;
+					return true;
+				}
+				return false;
+			}
+			return false;
+		}
+		if (c == L'[')
+		{
+			m_nPos++;
+			out.type = JsonValue::Array;
+			SkipSpace();
+			if (m_nPos < m_strText.size() && m_strText[m_nPos] == L']')
+			{
+				m_nPos++;
+				return true;
+			}
+			while (m_nPos < m_strText.size())
+			{
+				JsonValue val;
+				if (!ParseValue(val, nDepth + 1))
+					return false;
+				out.arr.push_back(val);
+				SkipSpace();
+				if (m_nPos >= m_strText.size())
+					return false;
+				if (m_strText[m_nPos] == L',')
+				{
+					m_nPos++;
+					continue;
+				}
+				if (m_strText[m_nPos] == L']')
+				{
+					m_nPos++;
+					return true;
+				}
+				// 兼容模型输出的非标准数组（如 [177 790 203 839]，数字间缺少逗号）
+				continue;
+			}
+			return false;
+		}
+		if (m_strText.substr(m_nPos, 4) == L"true")
+		{
+			m_nPos += 4;
+			out.type = JsonValue::Bool;
+			out.bValue = true;
+			return true;
+		}
+		if (m_strText.substr(m_nPos, 5) == L"false")
+		{
+			m_nPos += 5;
+			out.type = JsonValue::Bool;
+			out.bValue = false;
+			return true;
+		}
+		if (m_strText.substr(m_nPos, 4) == L"null")
+		{
+			m_nPos += 4;
+			out.type = JsonValue::Null;
+			return true;
+		}
+		return ParseNumber(out);
+	}
+
+	std::wstring m_strText;
+	size_t m_nPos;
+};
+
+static std::wstring JsonEscape(const std::wstring& src)
+{
+	std::wstring out;
+	out.reserve(src.size() + 16);
+	for (size_t i = 0; i < src.size(); i++)
+	{
+		wchar_t c = src[i];
+		switch (c)
+		{
+		case L'"':  out += L"\\\""; break;
+		case L'\\': out += L"\\\\"; break;
+		case L'\n': out += L"\\n";  break;
+		case L'\r': out += L"\\r";  break;
+		case L'\t': out += L"\\t";  break;
+		default:
+			if (c < 0x20)
+			{
+				wchar_t szBuf[8] = { 0 };
+				swprintf_s(szBuf, ARRAYSIZE(szBuf), L"\\u%04x", (unsigned int)c);
+				out += szBuf;
+			}
+			else
+			{
+				out += c;
+			}
+		}
+	}
+	return out;
+}
+
+static bool GetJsonNumber(const JsonValue& obj, const wchar_t* lpszKey, double& dValue)
+{
+	const JsonValue* p = obj.Get(lpszKey);
+	if (p == NULL || p->type != JsonValue::Number)
+		return false;
+	dValue = p->dValue;
+	return true;
+}
+
+// 从任意文本中提取数字（兼容 "175 785 203 837" 这类非法 JSON 坐标写法）
+static void CollectNumbers(const std::wstring& strText, std::vector<double>& nums)
+{
+	size_t i = 0;
+	while (i < strText.size())
+	{
+		wchar_t c = strText[i];
+		if ((c >= L'0' && c <= L'9') || c == L'-' || c == L'.')
+		{
+			size_t j = i;
+			if (strText[j] == L'-')
+				j++;
+			bool bDigit = false;
+			while (j < strText.size() && ((strText[j] >= L'0' && strText[j] <= L'9') || strText[j] == L'.'))
+			{
+				if (strText[j] >= L'0' && strText[j] <= L'9')
+					bDigit = true;
+				j++;
+			}
+			if (bDigit)
+			{
+				nums.push_back(wcstod(strText.c_str() + i, NULL));
+				i = j;
+				continue;
+			}
+		}
+		i++;
+	}
+}
+
+// 兼容 bbox 为数组、字符串、{x1,y1,x2,y2} 对象等多种输出形式
+static bool ExtractBoxNumbers(const JsonValue& v, double vals[4])
+{
+	std::vector<double> nums;
+	if (v.type == JsonValue::String)
+	{
+		CollectNumbers(v.str, nums);
+	}
+	else if (v.type == JsonValue::Array)
+	{
+		for (size_t k = 0; k < v.arr.size(); k++)
+		{
+			const JsonValue& e = v.arr[k];
+			if (e.type == JsonValue::Number)
+				nums.push_back(e.dValue);
+			else if (e.type == JsonValue::String)
+				CollectNumbers(e.str, nums);
+		}
+	}
+	else if (v.type == JsonValue::Object)
+	{
+		if (GetJsonNumber(v, L"x1", vals[0]) && GetJsonNumber(v, L"y1", vals[1]) &&
+			GetJsonNumber(v, L"x2", vals[2]) && GetJsonNumber(v, L"y2", vals[3]))
+			return true;
+	}
+
+	if (nums.size() < 4)
+		return false;
+	for (int k = 0; k < 4; k++)
+		vals[k] = nums[k];
+	return true;
+}
+
+// 从 chat/completions 响应中取出 message.content 文本
+static bool ExtractAiContent(const std::wstring& strResponse, std::wstring& strContent, std::wstring& strError)
+{
+	JsonValue root;
+	JsonParser parser(strResponse);
+	if (!parser.Parse(root) || root.type != JsonValue::Object)
+	{
+		strError = L"响应不是合法 JSON";
+		return false;
+	}
+
+	const JsonValue* choices = root.Get(L"choices");
+	if (choices == NULL || choices->type != JsonValue::Array || choices->arr.empty())
+	{
+		strError = L"响应缺少 choices 字段";
+		return false;
+	}
+	const JsonValue* message = choices->arr[0].Get(L"message");
+	if (message == NULL)
+	{
+		strError = L"响应缺少 message 字段";
+		return false;
+	}
+	const JsonValue* content = message->Get(L"content");
+	if (content == NULL)
+	{
+		strError = L"响应缺少 content 字段";
+		return false;
+	}
+
+	if (content->type == JsonValue::String)
+	{
+		strContent = content->str;
+	}
+	else if (content->type == JsonValue::Array)
+	{
+		for (size_t i = 0; i < content->arr.size(); i++)
+		{
+			const JsonValue* text = content->arr[i].Get(L"text");
+			if (text != NULL && text->type == JsonValue::String)
+				strContent += text->str;
+		}
+	}
+
+	if (strContent.empty())
+	{
+		strError = L"模型返回内容为空";
+		return false;
+	}
+	return true;
+}
+
+// 解析模型输出的框，坐标可为像素（相对上传图）或 0~1 归一化，统一转为 YOLO 归一化
+static bool ParseAiBoxes(const std::wstring& strContent, LONG nWidth, LONG nHeight,
+	std::vector<AiBoxData>& boxes, std::wstring& strError)
+{
+	size_t nBegin = strContent.find(L'[');
+	size_t nEnd = strContent.rfind(L']');
+	if (nBegin == std::wstring::npos || nEnd == std::wstring::npos || nEnd <= nBegin)
+	{
+		strError = L"模型未返回 JSON 数组";
+		return false;
+	}
+
+	JsonValue arr;
+	JsonParser parser(strContent.substr(nBegin, nEnd - nBegin + 1));
+	if (!parser.Parse(arr) || arr.type != JsonValue::Array)
+	{
+		strError = L"模型返回的 JSON 数组解析失败";
+		return false;
+	}
+
+	boxes.clear();
+	std::wstring strLastClass;
+	for (size_t i = 0; i < arr.arr.size(); i++)
+	{
+		const JsonValue& item = arr.arr[i];
+		if (item.type != JsonValue::Object)
+			continue;
+
+		std::wstring strName;
+		const wchar_t* lpszNameKeys[] = { L"class", L"label", L"name" };
+		for (int k = 0; k < 3 && strName.empty(); k++)
+		{
+			const JsonValue* v = item.Get(lpszNameKeys[k]);
+			if (v != NULL && v->type == JsonValue::String)
+				strName = v->str;
+		}
+		while (!strName.empty() && (strName[0] == L' ' || strName[0] == L'\t'))
+			strName.erase(strName.begin());
+		while (!strName.empty() && (strName[strName.size() - 1] == L' ' || strName[strName.size() - 1] == L'\t'))
+			strName.erase(strName.size() - 1);
+		// 模型偶尔会漏写类别，沿用上一个框的类别名
+		if (strName.empty())
+			strName = strLastClass;
+		if (strName.empty())
+			strName = L"object";
+		strLastClass = strName;
+
+		double x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+		bool bGotBox = false;
+		const JsonValue* bb = item.Get(L"bbox");
+		if (bb == NULL)
+			bb = item.Get(L"box");
+		if (bb != NULL)
+		{
+			double vals[4] = { 0, 0, 0, 0 };
+			if (ExtractBoxNumbers(*bb, vals))
+			{
+				x1 = vals[0]; y1 = vals[1]; x2 = vals[2]; y2 = vals[3];
+				bGotBox = true;
+			}
+		}
+		if (!bGotBox && GetJsonNumber(item, L"x1", x1) && GetJsonNumber(item, L"y1", y1) &&
+			GetJsonNumber(item, L"x2", x2) && GetJsonNumber(item, L"y2", y2))
+		{
+			bGotBox = true;
+		}
+		if (!bGotBox)
+			continue;
+
+		// 绝对值明显大于 1 视为像素坐标，反之以归一化坐标处理
+		bool bPixel = fabs(x1) > 1.5 || fabs(y1) > 1.5 || fabs(x2) > 1.5 || fabs(y2) > 1.5;
+		if (bPixel)
+		{
+			if (nWidth <= 0 || nHeight <= 0)
+				continue;
+			x1 /= nWidth; y1 /= nHeight;
+			x2 /= nWidth; y2 /= nHeight;
+		}
+
+		double left = min(x1, x2), right = max(x1, x2);
+		double top = min(y1, y2), bottom = max(y1, y2);
+		left = min(max(left, 0.0), 1.0);
+		top = min(max(top, 0.0), 1.0);
+		right = min(max(right, 0.0), 1.0);
+		bottom = min(max(bottom, 0.0), 1.0);
+		if (right - left < 0.002 || bottom - top < 0.002)
+			continue;
+
+		AiBoxData box;
+		box.cx = (left + right) / 2.0;
+		box.cy = (top + bottom) / 2.0;
+		box.w = right - left;
+		box.h = bottom - top;
+		box.strName = strName;
+		boxes.push_back(box);
+	}
+	return true;
+}
+
+} // namespace
+
 
 struct AiPreset { LPCTSTR szName; LPCTSTR szBase; LPCTSTR szModel; };
 static const AiPreset g_aiPresets[] =
 {
-	{ _T("豆包(火山引擎)"), _T("https://ark.cn-beijing.volces.com/api/v3"),           _T("Doubao - Seed - Evolving") },
+	{ _T("豆包(火山引擎)"), _T("https://ark.cn-beijing.volces.com/api/v3"),           _T("doubao-seed-evolving") },
 	{ _T("通义千问(阿里)"), _T("https://dashscope.aliyuncs.com/compatible-mode/v1"),  _T("qwen-vl-max") },
 	{ _T("智谱GLM"),        _T("https://open.bigmodel.cn/api/paas/v4"),               _T("glm-4v-flash") },
 	{ _T("OpenAI"),         _T("https://api.openai.com/v1"),                          _T("gpt-4o-mini") },
@@ -1105,20 +1638,6 @@ void CPageAnnotate::OnBnClickedBtnAiAnnotate()
 		return;
 	}
 
-	CString strGreen = GetGreenRoot();
-	CString strPython = GetGreenPython();
-	if (strGreen.IsEmpty() || strPython.IsEmpty())
-	{
-		AfxMessageBox(_T("未找到 YOLO_Green 绿色包或 python.exe。"), MB_ICONWARNING);
-		return;
-	}
-	CString strScript = strGreen + _T("\\scripts\\ai_annotate.py");
-	if (!::PathFileExists(strScript))
-	{
-		AfxMessageBox(_T("未找到 scripts\\ai_annotate.py，请检查绿色包是否完整。"), MB_ICONWARNING);
-		return;
-	}
-
 	m_arrAiTodo.RemoveAll();
 	for (INT_PTR i = 0; i < m_arrImages.GetSize(); i++)
 	{
@@ -1127,7 +1646,7 @@ void CPageAnnotate::OnBnClickedBtnAiAnnotate()
 	}
 	if (m_arrAiTodo.GetSize() == 0)
 	{
-		AfxMessageBox(_T("All images already have labels. Nothing for AI to annotate."), MB_ICONINFORMATION);
+		AfxMessageBox(_T("所有图片都已存在标签文件，没有需要 AI 标注的图片。"), MB_ICONINFORMATION);
 		return;
 	}
 
@@ -1144,6 +1663,7 @@ void CPageAnnotate::OnBnClickedBtnAiAnnotate()
 		m_strAiModel = g_aiPresets[nProvider].szModel;
 
 	m_nAiIndex = 0;
+	m_nAiRunId++;
 	m_bAiStop = false;
 	m_bAiClassesDirty = false;
 	m_bAiRunning = true;
@@ -1158,92 +1678,230 @@ void CPageAnnotate::OnBnClickedBtnAiAnnotate()
 
 void CPageAnnotate::StartAiAnnotateImage()
 {
-	CString strImg = m_arrAiTodo[m_nAiIndex];
-	m_vecAiBoxes.clear();
-	m_bAiGotResult = false;
-	m_bAiError = false;
-
-	CString strBase64(ImageToJpegBase64(strImg, 640, 75).c_str());
-	if (strBase64.IsEmpty())
+	int nTotal = (int)m_arrAiTodo.GetSize();
+	if (m_nAiIndex < 0 || m_nAiIndex >= nTotal)
 	{
-		AppendLog(_T("[AI] 图片读取或编码失败: ") + strImg + _T("\r\n"));
+		AppendLog(_T("==== AI 标注全部完成 ====\r\n"));
+		m_bAiRunning = false;
+		SetAiRunningUI(false);
+		SetStatus(_T("AI 标注完成"));
+		UpdateAnnoStatus();
 		return;
 	}
 
-	CString strModel = m_strAiModel;
-	if (strModel.IsEmpty())
-		strModel = g_aiPresets[0].szModel;
-
-	CString postdata;
-	postdata.Format(
-		L"{"
-		L"\"model\": \"doubao-seed-evolving\","
-		L"\"input\": ["
-		L"{"
-		L"\"role\": \"user\","
-		L"\"content\": ["
-		L"{"
-		L"\"type\": \"input_image\","
-		L"\"image_url\": \"data:image/jpeg;base64,%ws\""
-		L"},"
-		L"{"
-		L"\"type\": \"input_text\","
-		L"\"text\": \"你是图像标注工具。识别图片中所有目标，只输出纯JSON数组，不要任何解释、不要markdown。每条格式：{\\\"label\\\":\\\"类别\\\",\\\"x1\\\":左上像素x,\\\"y1\\\":左上像素y,\\\"x2\\\":右下像素x,\\\"y2\\\":右下像素y}\""
-		L"}"
-		L"]"
-		L"}"
-		L"],"
-		L"\"temperature\":0.1,"
-		L"\"max_tokens\":2048"
-		L"}",
-		strBase64.GetString()
-	);
-	std::string bodyUtf8 = CW2A(postdata, CP_UTF8);
-
-	CString strUrl = L"https://ark.cn-beijing.volces.com/api/v3/responses";
-	CString Heade;
-	Heade.Format(L"Authorization: Bearer %ws\r\n", m_strAiKey);
-
-	DWORD dwCode = 0;
-	std::vector<char> t_data = HttpPost(strUrl.GetString(), bodyUtf8.c_str(), (DWORD)bodyUtf8.length(), Heade.GetString(), dwCode);
-
-	CString strResp;
-	if (t_data.empty())
-		strResp = _T("请求失败：网络错误、超时或无法连接服务器");
-	else if (dwCode != 200)
-	{
-		CString strBody = CA2W(t_data.data(), CP_UTF8);
-		strResp.Format(_T("HTTP %lu: %ws"), dwCode, (LPCTSTR)strBody);
-	}
-	else
-		strResp = CA2W(t_data.data(), CP_UTF8);
+	CString strImg = m_arrAiTodo[m_nAiIndex];
+	TCHAR szName[MAX_PATH] = { 0 };
+	_tcsncpy_s(szName, strImg, _TRUNCATE);
+	::PathStripPath(szName);
 
 	CString strStatus;
-	strStatus.Format(_T("AI 标注中 (%d/%d): %ws"),
-		m_nAiIndex + 1, (int)m_arrAiTodo.GetSize(), strResp);
+	strStatus.Format(_T("AI 标注中 (%d/%d): %s，等待模型返回..."),
+		m_nAiIndex + 1, nTotal, szName);
 	SetStatus(strStatus);
+
+	std::wstring strImgPath = (LPCTSTR)strImg;
+	std::wstring strKey = (LPCTSTR)m_strAiKey;
+	std::wstring strModel = (LPCTSTR)m_strAiModel;
+
+	// 组装 OpenAI 兼容接口地址（豆包火山方舟同样使用 chat/completions）
+	std::wstring strUrl = (LPCTSTR)m_strAiBase;
+	while (!strUrl.empty() && (strUrl[strUrl.size() - 1] == L'/' || strUrl[strUrl.size() - 1] == L' '))
+		strUrl.erase(strUrl.size() - 1);
+	strUrl += L"/chat/completions";
+
+	// 已有类别作为提示，降低模型乱造类别名的概率
+	std::wstring strClassesHint;
+	CStringArray arrNames;
+	ParseClassNames(arrNames);
+	for (INT_PTR i = 0; i < arrNames.GetSize(); i++)
+	{
+		if (!strClassesHint.empty())
+			strClassesHint += L"、";
+		strClassesHint += std::wstring((LPCTSTR)arrNames[i]);
+	}
+
+	HWND hWnd = GetSafeHwnd();
+	int nIndex = m_nAiIndex;
+	int nRunId = m_nAiRunId;
+
+	// 网络请求放到后台线程，避免界面卡死
+	std::thread([hWnd, nIndex, nRunId, strImgPath, strKey, strUrl, strModel, strClassesHint]()
+	{
+		AiAnnotateResult* pRes = new AiAnnotateResult();
+		pRes->nIndex = nIndex;
+		pRes->strImage = strImgPath;
+
+		LONG nWidth = 0, nHeight = 0;
+		if (!GetImageSize(strImgPath.c_str(), nWidth, nHeight))
+		{
+			pRes->strError = L"图片读取失败";
+		}
+		else
+		{
+			const LONG nMaxSide = 1280;
+			LONG nSendW = nWidth, nSendH = nHeight;
+			if (nWidth > nMaxSide || nHeight > nMaxSide)
+			{
+				double dScale = (double)nMaxSide / (double)max(nWidth, nHeight);
+				nSendW = (LONG)(nWidth * dScale);
+				nSendH = (LONG)(nHeight * dScale);
+				if (nSendW < 1) nSendW = 1;
+				if (nSendH < 1) nSendH = 1;
+			}
+
+			std::string strBase64 = ImageToJpegBase64(strImgPath.c_str(), nMaxSide, 85);
+			if (strBase64.empty())
+			{
+				pRes->strError = L"图片编码失败";
+			}
+			else
+			{
+				std::wstring strPrompt;
+				strPrompt += L"你是图像目标检测标注员。请识别图片中所有清晰可见的目标，只输出一个 JSON 数组，不要输出任何解释，不要输出 markdown 代码块。\n";
+				strPrompt += L"每项格式：{\"class\":\"类别名\",\"bbox\":[x1,y1,x2,y2]}\n";
+				wchar_t szSize[160] = { 0 };
+				swprintf_s(szSize, ARRAYSIZE(szSize), L"bbox 是目标框在该图片中的像素坐标：x1,y1 为左上角，x2,y2 为右下角；图片宽 %ld 像素、高 %ld 像素。\n", nSendW, nSendH);
+				strPrompt += szSize;
+				if (!strClassesHint.empty())
+				{
+					strPrompt += L"只允许标注以下类别：" + strClassesHint + L"。\n";
+					strPrompt += L"严格忽略界面元素（小地图、任务面板、技能栏、状态栏、聊天框、按钮、图标等）和背景环境（天空、云朵、远山、水面、沙滩、草地、树木、栅栏、石头等），除非它们明确属于上述类别。\n";
+					strPrompt += L"不属于上述类别的目标一律不要输出。没有符合的目标时输出 []。";
+				}
+				else
+				{
+					strPrompt += L"当前没有预设类别，可自由命名，但只标注游戏中可交互或可识别的目标对象，忽略界面元素与背景环境。没有目标时输出 []。";
+				}
+
+				std::wstring strBody;
+				strBody += L"{\"model\":\"";
+				strBody += JsonEscape(strModel);
+				strBody += L"\",\"temperature\":0.1,\"max_tokens\":4096";
+				// 豆包/方舟默认开启深度思考，标注任务关掉以加快速度并保证直接输出 JSON
+				if (strUrl.find(L"volces.com") != std::wstring::npos)
+					strBody += L",\"thinking\":{\"type\":\"disabled\"}";
+				strBody += L",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"";
+				strBody += JsonEscape(strPrompt);
+				strBody += L"\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,";
+				strBody.append(strBase64.begin(), strBase64.end());
+				strBody += L"\"}}]}]}";
+
+				std::string strUtf8;
+				int nUtf8Len = ::WideCharToMultiByte(CP_UTF8, 0, strBody.c_str(), (int)strBody.size(), NULL, 0, NULL, NULL);
+				if (nUtf8Len > 0)
+				{
+					strUtf8.resize((size_t)nUtf8Len);
+					::WideCharToMultiByte(CP_UTF8, 0, strBody.c_str(), (int)strBody.size(), &strUtf8[0], nUtf8Len, NULL, NULL);
+				}
+
+				std::wstring strAuth = L"Authorization: Bearer " + strKey + L"\r\n";
+				DWORD dwCode = 0;
+				std::vector<char> vecResp = HttpPost(strUrl, strUtf8.c_str(), (DWORD)strUtf8.size(), strAuth, dwCode);
+
+				if (vecResp.empty())
+				{
+					pRes->strError = L"请求失败：网络错误、超时或无法连接服务器";
+				}
+				else if (dwCode != 200)
+				{
+					CStringW strBodyW(CA2W(vecResp.data(), CP_UTF8));
+					std::wstring strBodyWs = (LPCWSTR)strBodyW;
+					if (strBodyWs.size() > 300)
+						strBodyWs = strBodyWs.substr(0, 300) + L"...";
+					wchar_t szErr[64] = { 0 };
+					swprintf_s(szErr, ARRAYSIZE(szErr), L"HTTP %lu: ", dwCode);
+					pRes->strError = szErr + strBodyWs;
+				}
+				else
+				{
+					CStringW strBodyW(CA2W(vecResp.data(), CP_UTF8));
+					std::wstring strBodyWs = (LPCWSTR)strBodyW;
+					std::wstring strContent, strErr;
+					if (!ExtractAiContent(strBodyWs, strContent, strErr))
+						pRes->strError = strErr;
+					else if (!ParseAiBoxes(strContent, nSendW, nSendH, pRes->boxes, strErr))
+					{
+						std::wstring strRaw = strContent;
+						if (strRaw.size() > 200)
+							strRaw = strRaw.substr(0, 200) + L"...";
+						pRes->strError = strErr + L"；原始输出: " + strRaw;
+					}
+					else
+						pRes->bOk = true;
+				}
+			}
+		}
+
+		if (!::IsWindow(hWnd) || !::PostMessage(hWnd, WM_USER_AI_RESULT, (WPARAM)nRunId, (LPARAM)pRes))
+			delete pRes;
+	}).detach();
 }
 
-
-void CPageAnnotate::HandleAiProcExit(DWORD dwExit)
+LRESULT CPageAnnotate::OnAiResult(WPARAM wParam, LPARAM lParam)
 {
-	CString strImg = m_arrAiTodo[m_nAiIndex];
+	std::unique_ptr<AiAnnotateResult> pResult((AiAnnotateResult*)lParam);
+	if (pResult == NULL)
+		return 0;
+
+	// 已停止或已开始新一轮任务，丢弃过期结果
+	if (!m_bAiRunning || (int)wParam != m_nAiRunId)
+		return 0;
+
+	HandleAiResult(pResult.get());
+	return 0;
+}
+
+static bool IsAiClassAllowed(const CStringArray& arrNames, const CString& strName);
+
+void CPageAnnotate::HandleAiResult(AiAnnotateResult* pResult)
+{
+	if (pResult == NULL)
+		return;
+
+	CString strImg(pResult->strImage.c_str());
 	TCHAR szName[MAX_PATH] = { 0 };
 	_tcsncpy_s(szName, strImg, _TRUNCATE);
 	::PathStripPath(szName);
 	int nTotal = (int)m_arrAiTodo.GetSize();
 
-	if (dwExit == 0 && m_bAiGotResult && !m_bAiError)
+	if (pResult->bOk)
 	{
+		CStringArray arrKnown;
+		ParseClassNames(arrKnown);
+		bool bRestrict = arrKnown.GetSize() > 0;
 
+		int nWritten = 0;
+		int nSkipped = 0;
+		CStringArray arrSkipNames;
 		CString strContent;
-		for (size_t i = 0; i < m_vecAiBoxes.size(); i++)
+		for (size_t i = 0; i < pResult->boxes.size(); i++)
 		{
-			const AiBox& b = m_vecAiBoxes[i];
-			int nCls = MergeAiClass(b.strName);
+			const AiBoxData& b = pResult->boxes[i];
+			CString strName(b.strName.c_str());
+
+			// 只保留类别表中已有的类别，模型自行编造的类别一律丢弃
+			if (bRestrict && !IsAiClassAllowed(arrKnown, strName))
+			{
+				nSkipped++;
+				bool bExists = false;
+				for (INT_PTR k = 0; k < arrSkipNames.GetSize(); k++)
+				{
+					if (arrSkipNames[k].CompareNoCase(strName) == 0)
+					{
+						bExists = true;
+						break;
+					}
+				}
+				if (!bExists)
+					arrSkipNames.Add(strName);
+				continue;
+			}
+
+			int nCls = MergeAiClass(strName);
 			CString strLine;
 			strLine.Format(_T("%d %.6f %.6f %.6f %.6f\n"), nCls, b.cx, b.cy, b.w, b.h);
 			strContent += strLine;
+			nWritten++;
 		}
 
 		CString strLabel = GetLabelPathFor(strImg);
@@ -1251,18 +1909,39 @@ void CPageAnnotate::HandleAiProcExit(DWORD dwExit)
 			AppendLog(_T("标签写入失败: ") + strLabel + _T("\r\n"));
 
 		CString strLog;
-		strLog.Format(_T("[AI %d/%d] %s -> %d 个框\r\n"),
-			m_nAiIndex + 1, nTotal, szName, (int)m_vecAiBoxes.size());
+		if (nWritten == 0)
+			strLog.Format(_T("[AI %d/%d] %s -> 未检测到符合类别的目标"),
+				m_nAiIndex + 1, nTotal, szName);
+		else
+			strLog.Format(_T("[AI %d/%d] %s -> %d 个框"),
+				m_nAiIndex + 1, nTotal, szName, nWritten);
+		if (nSkipped > 0)
+		{
+			CString strExtra;
+			strExtra.Format(_T("（已过滤 %d 个非类别表目标"), nSkipped);
+			for (INT_PTR k = 0; k < arrSkipNames.GetSize() && k < 5; k++)
+			{
+				strExtra += (k == 0) ? _T(": ") : _T("、");
+				strExtra += arrSkipNames[k];
+			}
+			if (arrSkipNames.GetSize() > 5)
+				strExtra += _T("等");
+			strExtra += _T("）");
+			strLog += strExtra;
+		}
+		strLog += _T("\r\n");
 		AppendLog(strLog);
 	}
 	else
 	{
+		CString strErr(pResult->strError.c_str());
+		if (strErr.IsEmpty())
+			strErr = _T("未知错误");
 		CString strLog;
-		strLog.Format(_T("[AI %d/%d] %s 失败（退出码 %lu），已跳过，下次可重试\r\n"),
-			m_nAiIndex + 1, nTotal, szName, dwExit);
+		strLog.Format(_T("[AI %d/%d] %s 失败：%s（已跳过，下次可重试）\r\n"),
+			m_nAiIndex + 1, nTotal, szName, (LPCTSTR)strErr);
 		AppendLog(strLog);
 	}
-
 
 	if (m_bAiClassesDirty)
 	{
@@ -1295,6 +1974,17 @@ void CPageAnnotate::HandleAiProcExit(DWORD dwExit)
 		return;
 	}
 	StartAiAnnotateImage();
+}
+
+
+static bool IsAiClassAllowed(const CStringArray& arrNames, const CString& strName)
+{
+	for (INT_PTR i = 0; i < arrNames.GetSize(); i++)
+	{
+		if (arrNames[i].CompareNoCase(strName) == 0)
+			return true;
+	}
+	return false;
 }
 
 int CPageAnnotate::MergeAiClass(const CString& strAiName)
@@ -1401,72 +2091,14 @@ void CPageAnnotate::OnBnClickedBtnLabelImg()
 LRESULT CPageAnnotate::OnRecvLog(WPARAM /*wParam*/, LPARAM lParam)
 {
 	CStringW* pMsg = (CStringW*)lParam;
-	if (pMsg != NULL)
-	{
-		CString strLine(*pMsg);
-		if (m_bAiRunning && strLine.Left(3) == _T("AI_"))
-		{
-			if (strLine.Left(8) == _T("AI_SIZE "))
-			{
-				m_bAiGotResult = true;
-			}
-			else if (strLine.Left(7) == _T("AI_BOX "))
-			{
-				LPCTSTR p = (LPCTSTR)strLine + 7;
-				double vals[4];
-				int nGot = 0;
-				for (int k = 0; k < 4; k++)
-				{
-					while (*p == _T(' '))
-						p++;
-					TCHAR* pEnd = NULL;
-					vals[k] = _tcstod(p, &pEnd);
-					if (pEnd == p)
-						break;
-					p = pEnd;
-					nGot++;
-				}
-				if (nGot == 4)
-				{
-					while (*p == _T(' '))
-						p++;
-					CString strName = p;
-					strName.Trim();
-					if (!strName.IsEmpty())
-					{
-						AiBox box;
-						box.cx = vals[0]; box.cy = vals[1];
-						box.w = vals[2];  box.h = vals[3];
-						box.strName = strName;
-						m_vecAiBoxes.push_back(box);
-					}
-				}
-			}
-			else if (strLine.Left(9) == _T("AI_ERROR "))
-			{
-				m_bAiError = true;
-				AppendLog(strLine.Mid(9) + _T("\r\n"));
-			}
-			else
-			{
-				strLine += _T("\r\n");
-				AppendLog(strLine);
-			}
-			delete pMsg;
-		}
-		return 0;
-	}
+	delete pMsg;
+	return 0;
 }
 LRESULT CPageAnnotate::OnProcExit(WPARAM wParam, LPARAM /*lParam*/)
 {
 	DWORD dwExit = (DWORD)wParam;
 
 	m_capture.Stop();
-	if (m_bAiRunning)
-	{
-		HandleAiProcExit(dwExit);
-		return 0;
-	}
 
 	SetStatus(dwExit == 0 ? _T("预标注完成") : _T(""));
 

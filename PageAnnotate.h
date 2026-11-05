@@ -4,10 +4,28 @@
 
 #include "afxdialogex.h"
 
+#include <string>
 #include <vector>
 
 #include "AnnotateCanvas.h"
 #include "LogCapture.h"
+
+#define WM_USER_AI_RESULT (WM_USER + 102)
+
+struct AiBoxData
+{
+	double cx, cy, w, h;
+	std::wstring strName;
+};
+
+struct AiAnnotateResult
+{
+	int nIndex = 0;
+	std::wstring strImage;
+	bool bOk = false;
+	std::wstring strError;
+	std::vector<AiBoxData> boxes;
+};
 
 class CPageAnnotate : public CDialogEx
 {
@@ -44,6 +62,7 @@ protected:
 	afx_msg LRESULT OnAnnoChanged(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnRecvLog(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnProcExit(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnAiResult(WPARAM wParam, LPARAM lParam);
 	DECLARE_MESSAGE_MAP()
 
 private:
@@ -83,7 +102,7 @@ private:
 	void Layout();
 	void StartAiAnnotateImage();
 	
-	void HandleAiProcExit(DWORD dwExit);
+	void HandleAiResult(AiAnnotateResult* pResult);
 	
 	int  MergeAiClass(const CString& strAiName);
 
@@ -95,18 +114,15 @@ private:
 	CStringArray    m_arrImages;   
 	int             m_nCurImage;
 
-	struct AiBox { double cx, cy, w, h; CString strName; };
 	bool            m_bAiRunning = false;      
 	bool            m_bAiStop = false;         
-	bool            m_bAiGotResult = false;    
-	bool            m_bAiError = false;        
 	bool            m_bAiClassesDirty = false; 
 	int             m_nAiIndex = 0;            
+	int             m_nAiRunId = 0;            
 	CString         m_strAiKey;                
 	CString         m_strAiBase;               
 	CString         m_strAiModel;              
 	CStringArray    m_arrAiTodo;               
-	std::vector<AiBox> m_vecAiBoxes;           
 public:
 	afx_msg BOOL OnHelpInfo(HELPINFO* pHelpInfo);
 };
