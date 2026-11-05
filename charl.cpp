@@ -44,7 +44,8 @@ std::vector<char> HttpPost(const std::wstring& wstrUrl, const char* pUtf8Body, D
 	DWORD dwResolveTimeout = 15000;
 	DWORD dwConnectTimeout = 15000;
 	DWORD dwSendTimeout    = 60000;
-	DWORD dwRecvTimeout    = 120000;
+	// 豆包思考模式推理耗时长，120s 接收超时会导致整批失败，放宽到 300s
+	DWORD dwRecvTimeout    = 300000;
 	BOOL bHttps = 0;
 	std::wstring headers = L"Content-Type: application/json\r\n";
 	DWORD cbCode = sizeof(dwCode);
