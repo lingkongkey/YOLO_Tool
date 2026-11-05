@@ -28,3 +28,11 @@ Release/
 *.lib
 *.exp
 *.res
+
+# 项目依赖的第三方静态库（zlib），需要随源码入库
+!File/lib/x86/
+!File/lib/x86/**
+!File/lib/x64/
+!File/lib/x64/**
+!File/lib/zlib/
+!File/lib/**/*.lib

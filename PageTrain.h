@@ -36,6 +36,8 @@ private:
 	CString GetBestWeightPath();
 	
 	void StartExport();
+
+	bool StartKeyoloPack();
 	
 	void AppendLog(const CString& strText);
 	
@@ -56,6 +58,7 @@ private:
 	CRichEditCtrl m_richLog;
 	CProcessLogCapture m_capture;
 	bool            m_bExporting;   
+	bool            m_bPackKeyolo = false;  
 	CString         m_strBestPath;  
 public:
 	afx_msg BOOL OnHelpInfo(HELPINFO* pHelpInfo);

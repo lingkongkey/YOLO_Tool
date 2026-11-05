@@ -9,11 +9,48 @@
 #include "AppConfig.h"
 #include "afxdialogex.h"
 #include <shlwapi.h>
+#include <vector>
+#include "File/zlib/zlib.h"
 #pragma comment(lib, "shlwapi.lib")
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+
+static bool ReadAllBytes(const CString& strPath, std::vector<BYTE>& buf)
+{
+	CFile file;
+	if (!file.Open(strPath, CFile::modeRead | CFile::shareDenyWrite))
+		return false;
+	ULONGLONG nLen = file.GetLength();
+	buf.resize((size_t)nLen);
+	if (nLen > 0)
+		file.Read(buf.data(), (UINT)nLen);
+	file.Close();
+	return true;
+}
+
+static bool CompressBytes(const std::vector<BYTE>& src, std::vector<BYTE>& dst)
+{
+	if (src.empty())
+	{
+		dst.clear();
+		return true;
+	}
+	uLong bound = compressBound((uLong)src.size());
+	dst.resize(bound);
+	uLongf nDst = bound;
+	if (compress2(dst.data(), &nDst, src.data(), (uLong)src.size(), Z_BEST_COMPRESSION) != Z_OK)
+		return false;
+	dst.resize((size_t)nDst);
+	return true;
+}
+
+static void WriteU64(BYTE* p, ULONGLONG v)
+{
+	for (int i = 0; i < 8; i++)
+		p[i] = (BYTE)(v >> (8 * i));
+}
 
 CPageTrain::CPageTrain(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_PAGE_TRAIN, pParent)
@@ -367,6 +404,7 @@ void CPageTrain::FillExportFormats()
 	pCombo->ResetContent();
 	// Display format: "actual_value - Description"; parse before ' - ' to get --format value
 	pCombo->AddString(_T("ncnn - ncnn inference engine (C++)"));
+	pCombo->AddString(_T("keyolo - NCNN 打包 (.bin+.param → .keyolo)"));
 	pCombo->AddString(_T("onnx - ONNX / OpenCV DNN"));
 	pCombo->AddString(_T("torchscript - PyTorch JIT"));
 	pCombo->AddString(_T("engine - TensorRT"));
@@ -561,6 +599,10 @@ void CPageTrain::StartExport()
 		return;
 	}
 
+	m_bPackKeyolo = (strFormat == _T("keyolo"));
+	if (m_bPackKeyolo)
+		strFormat = _T("ncnn");
+
 	CString strImgsz;
 	GetDlgItemText(IDC_EDIT_IMGSZ, strImgsz);
 	strImgsz.Trim();
@@ -593,6 +635,134 @@ void CPageTrain::StartExport()
 	}
 	SetRunning(true);
 	SetStatus(_T("导出中..."));
+}
+
+
+bool CPageTrain::StartKeyoloPack()
+{
+	CString strBest = GetBestWeightPath();
+	CString strNcnnDir;
+	if (!strBest.IsEmpty())
+	{
+		CString strStem = strBest;
+		int nDot = strStem.ReverseFind(_T('.'));
+		if (nDot > 0)
+			strStem = strStem.Left(nDot);
+		strNcnnDir = strStem + _T("_ncnn_model");
+	}
+
+	if (!::PathIsDirectory(strNcnnDir))
+	{
+		int nSlash = strBest.ReverseFind(_T('\\'));
+		CString strDir = (nSlash > 0) ? strBest.Left(nSlash + 1) : CString(_T(""));
+		if (!strDir.IsEmpty())
+		{
+			CFileFind finder;
+			BOOL bMore = finder.FindFile(strDir + _T("*_ncnn_model"));
+			while (bMore)
+			{
+				bMore = finder.FindNextFile();
+				if (finder.IsDirectory())
+					strNcnnDir = finder.GetFilePath();
+			}
+			finder.Close();
+		}
+	}
+
+	if (!::PathIsDirectory(strNcnnDir))
+	{
+		AppendLog(_T("未找到 ncnn 导出目录，无法打包 .keyolo\r\n"));
+		return false;
+	}
+
+	CString strBinFile, strParamFile;
+	{
+		CFileFind finder;
+		BOOL bMore = finder.FindFile(strNcnnDir + _T("\\*.*"));
+		while (bMore)
+		{
+			bMore = finder.FindNextFile();
+			if (finder.IsDirectory())
+				continue;
+			CString strName = finder.GetFileName();
+			CString strLower = strName;
+			strLower.MakeLower();
+			if (strLower.Right(4) == _T(".bin"))
+				strBinFile = finder.GetFilePath();
+			else if (strLower.Right(6) == _T(".param"))
+				strParamFile = finder.GetFilePath();
+		}
+		finder.Close();
+	}
+
+	if (strBinFile.IsEmpty() || strParamFile.IsEmpty())
+	{
+		AppendLog(_T("ncnn 目录中未找到 .bin/.param 文件，无法打包 .keyolo\r\n"));
+		return false;
+	}
+
+	std::vector<BYTE> binRaw, paramRaw;
+	if (!ReadAllBytes(strBinFile, binRaw) || !ReadAllBytes(strParamFile, paramRaw))
+	{
+		AppendLog(_T("读取 .bin/.param 失败，无法打包 .keyolo\r\n"));
+		return false;
+	}
+
+	std::vector<BYTE> binZip, paramZip;
+	if (!CompressBytes(binRaw, binZip) || !CompressBytes(paramRaw, paramZip))
+	{
+		AppendLog(_T("zlib 压缩失败\r\n"));
+		return false;
+	}
+
+	CString strOut = strNcnnDir + _T(".keyolo");
+	if (::PathFileExists(strOut))
+		::DeleteFile(strOut);
+
+	// 头部: "YOLO" + 未压缩 bin/param 大小 + 压缩后 bin/param 大小（各 8 字节）
+	size_t nHeader = 4 + 8 * 4;
+	std::vector<BYTE> out;
+	out.resize(nHeader + binZip.size() + paramZip.size());
+
+	out[0] = 'Y'; out[1] = 'O'; out[2] = 'L'; out[3] = 'O';
+	WriteU64(&out[4],  (ULONGLONG)binRaw.size());
+	WriteU64(&out[12], (ULONGLONG)paramRaw.size());
+	WriteU64(&out[20], (ULONGLONG)binZip.size());
+	WriteU64(&out[28], (ULONGLONG)paramZip.size());
+
+	if (!binZip.empty())
+		memcpy(&out[nHeader], binZip.data(), binZip.size());
+	if (!paramZip.empty())
+		memcpy(&out[nHeader + binZip.size()], paramZip.data(), paramZip.size());
+
+	// 末尾随机填充干扰数据
+	srand((unsigned)GetTickCount());
+	int nPad = 16 + rand() % 241;
+	for (int i = 0; i < nPad; i++)
+		out.push_back((BYTE)(rand() & 0xFF));
+
+	CFile file;
+	if (!file.Open(strOut, CFile::modeCreate | CFile::modeWrite | CFile::shareExclusive))
+	{
+		AppendLog(_T("创建 .keyolo 文件失败\r\n"));
+		return false;
+	}
+	if (!out.empty())
+		file.Write(out.data(), (UINT)out.size());
+	file.Close();
+
+	CString strMsg;
+	strMsg.Format(
+		_T("==== 打包完成: %s ====\r\n")
+		_T("bin: %I64u -> %I64u 字节\r\n")
+		_T("param: %I64u -> %I64u 字节\r\n")
+		_T("头部 %u 字节（YOLO 标识 + 4 个尺寸），末尾干扰数据 %d 字节\r\n"),
+		(LPCTSTR)strOut,
+		(ULONGLONG)binRaw.size(), (ULONGLONG)binZip.size(),
+		(ULONGLONG)paramRaw.size(), (ULONGLONG)paramZip.size(),
+		(unsigned)nHeader, nPad);
+	AppendLog(strMsg);
+	return true;
 }
 
 
@@ -712,14 +882,6 @@ LRESULT CPageTrain::OnProcExit(WPARAM wParam, LPARAM lParam)
 	m_capture.Stop();
 	SetRunning(false);
 
-	CStringW tip;
-	if (bExport)
-		tip.Format(dwExit == 0 ? L"\r\n==== 导出完成 ====\r\n"
-			: L"\r\n==== 导出结束，退出码 %lu ====\r\n", dwExit);
-	else
-		tip.Format(dwExit == 0 ? L"\r\n==== 训练完成 ====\r\n"
-			: L"\r\n==== 训练结束，退出码 %lu ====\r\n", dwExit);
-
 	CHARFORMAT2W cf;
 	cf.cbSize = sizeof(CHARFORMAT2W);
 	cf.dwMask = CFM_COLOR;
@@ -728,6 +890,23 @@ LRESULT CPageTrain::OnProcExit(WPARAM wParam, LPARAM lParam)
 	long endPos = m_richLog.GetTextLength();
 	m_richLog.SetSel(endPos, endPos);
 	m_richLog.SetSelectionCharFormat(cf);
+
+	if (bExport && dwExit == 0 && m_bPackKeyolo)
+	{
+		m_bPackKeyolo = false;
+		bool bPackOk = StartKeyoloPack();
+		SetStatus(bPackOk ? _T("打包完成") : _T("打包失败"));
+		return 0;
+	}
+
+	CStringW tip;
+	if (bExport)
+		tip.Format(dwExit == 0 ? L"\r\n==== 导出完成 ====\r\n"
+			: L"\r\n==== 导出结束，退出码 %lu ====\r\n", dwExit);
+	else
+		tip.Format(dwExit == 0 ? L"\r\n==== 训练完成 ====\r\n"
+			: L"\r\n==== 训练结束，退出码 %lu ====\r\n", dwExit);
+
 	m_richLog.ReplaceSel(tip);
 	m_richLog.LineScroll(m_richLog.GetLineCount() - 1);
 
