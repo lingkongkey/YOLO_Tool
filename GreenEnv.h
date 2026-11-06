@@ -20,6 +20,8 @@ bool SetProjectRoot(LPCTSTR lpszPath);
 
 bool EnsureProjectDirs(LPCTSTR lpszRoot);
 
+bool RepairDataYamlPaths();
+
 CString GetProjectDatasetDir();
 
 CString GetProjectImagesDir();

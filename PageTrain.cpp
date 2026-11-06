@@ -337,7 +337,11 @@ void CPageTrain::OnShowWindow(BOOL bShow, UINT nStatus)
 {
 	CDialogEx::OnShowWindow(bShow, nStatus);
 	if (bShow)
+	{
 		RefreshEpochsDefault();
+		// 项目目录可能被复制到别处，打开训练页时静默修正 data.yaml 中的路径
+		RepairDataYamlPaths();
+	}
 }
 
 void CPageTrain::FillWeightsCombo()
@@ -493,6 +497,10 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 		AfxMessageBox(_T("data.yaml not found. Please select project root on Capture page first (auto-creates dataset\\data.yaml)."), MB_ICONWARNING);
 		return;
 	}
+
+	// 项目目录被复制到别处后，data.yaml 中的绝对路径会失效，训练前自动修正
+	if (RepairDataYamlPaths())
+		AppendLog(_T("data.yaml 中的路径参数已修正为当前项目位置\r\n"));
 
 	// Weights: dropdown shows file names (e.g. yolo11n.pt or train-3/best.pt)
 	CString strWeightsPath = strWeights;

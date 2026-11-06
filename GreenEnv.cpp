@@ -1,4 +1,4 @@
-// GreenEnv.cpp: YOLO_Green
+﻿// GreenEnv.cpp: YOLO_Green
 //
 
 #include "pch.h"
@@ -210,6 +210,138 @@ static void CreateDefaultDataYaml(const CString& strRoot)
 	WriteTextFileUtf8(strYaml, strText);
 }
 
+static CString NormalizeDirPath(CString strPath)
+{
+	strPath.Trim();
+	strPath.Replace(_T("/"), _T("\\"));
+	while (strPath.GetLength() > 3 && strPath[strPath.GetLength() - 1] == _T('\\'))
+		strPath = strPath.Left(strPath.GetLength() - 1);
+	return strPath;
+}
+
+static bool IsAbsDirPath(const CString& strPath)
+{
+	if (strPath.IsEmpty())
+		return false;
+	if (strPath[0] == _T('\\') || strPath[0] == _T('/'))
+		return true;
+	return strPath.GetLength() >= 2 && strPath[1] == _T(':');
+}
+
+// 校验并修正 data.yaml 中的 path/train/val：项目目录被复制到别处后绝对路径会失效
+static bool RepairDataYamlFile(const CString& strDataset)
+{
+	if (strDataset.IsEmpty())
+		return false;
+
+	CString strYaml = strDataset + _T("\\data.yaml");
+	if (!::PathFileExists(strYaml))
+		return false;
+
+	CString strText;
+	if (!ReadTextFileUtf8(strYaml, strText))
+		return false;
+
+	CString strExpect = strDataset;
+	strExpect.Replace(_T("\\"), _T("/"));
+	CString strExpectNorm = NormalizeDirPath(strDataset);
+
+	CString strOut;
+	bool bChanged = false;
+	bool bHasPath = false;
+
+	INT_PTR nPos = 0;
+	while (nPos <= strText.GetLength())
+	{
+		INT_PTR nEnd = strText.Find(_T('\n'), (int)nPos);
+		CString strLine = (nEnd < 0) ? strText.Mid((int)nPos) : strText.Mid((int)nPos, (int)(nEnd - nPos));
+		CString strEol = (nEnd < 0) ? CString(_T("")) : CString(_T("\n"));
+
+		if (!strLine.IsEmpty() && strLine[strLine.GetLength() - 1] == _T('\r'))
+		{
+			strLine = strLine.Left(strLine.GetLength() - 1);
+			strEol = _T("\r\n");
+		}
+
+		CString strTrim = strLine;
+		strTrim.Trim();
+
+		CString strKey, strValue;
+		int nColon = strTrim.Find(_T(':'));
+		if (nColon > 0)
+		{
+			strKey = strTrim.Left(nColon);
+			strKey.Trim();
+			strValue = strTrim.Mid(nColon + 1);
+			strValue.Trim();
+			if (strValue.GetLength() >= 2 &&
+				((strValue[0] == _T('"') && strValue[strValue.GetLength() - 1] == _T('"')) ||
+				 (strValue[0] == _T('\'') && strValue[strValue.GetLength() - 1] == _T('\''))))
+				strValue = strValue.Mid(1, strValue.GetLength() - 2);
+		}
+
+		if (!strKey.IsEmpty() && strKey.CompareNoCase(_T("path")) == 0)
+		{
+			bHasPath = true;
+			bool bValid = NormalizeDirPath(strValue).CompareNoCase(strExpectNorm) == 0
+				&& ::PathIsDirectory(strValue);
+			if (!bValid)
+			{
+				CString strNewLine;
+				strNewLine.Format(_T("path: %s"), (LPCTSTR)strExpect);
+				if (strNewLine != strLine)
+				{
+					strLine = strNewLine;
+					bChanged = true;
+				}
+			}
+		}
+		else if (!strKey.IsEmpty() &&
+			(strKey.CompareNoCase(_T("train")) == 0 || strKey.CompareNoCase(_T("val")) == 0))
+		{
+			CString strAbs = strValue;
+			strAbs.Replace(_T("/"), _T("\\"));
+			if (!IsAbsDirPath(strValue))
+				strAbs = strDataset + _T("\\") + strAbs;
+
+			if (!::PathIsDirectory(strAbs))
+			{
+				bool bTrain = (strKey.CompareNoCase(_T("train")) == 0);
+				CString strNewLine;
+				strNewLine.Format(_T("%s: %s"), (LPCTSTR)strKey, bTrain ? _T("images/train") : _T("images/val"));
+				if (strNewLine != strLine)
+				{
+					strLine = strNewLine;
+					bChanged = true;
+				}
+			}
+		}
+
+		strOut += strLine;
+		strOut += strEol;
+
+		if (nEnd < 0)
+			break;
+		nPos = nEnd + 1;
+	}
+
+	if (!bHasPath)
+	{
+		strOut = CString(_T("path: ")) + strExpect + _T("\n") + strOut;
+		bChanged = true;
+	}
+
+	if (!bChanged)
+		return false;
+
+	return WriteTextFileUtf8(strYaml, strOut);
+}
+
+bool RepairDataYamlPaths()
+{
+	return RepairDataYamlFile(GetProjectDatasetDir());
+}
+
 bool EnsureProjectDirs(LPCTSTR lpszRoot)
 {
 	CString strRoot = lpszRoot ? lpszRoot : _T("");
@@ -240,6 +372,7 @@ bool EnsureProjectDirs(LPCTSTR lpszRoot)
 		::SHCreateDirectoryEx(NULL, strRoot + szSub[i], NULL);
 
 	CreateDefaultDataYaml(strRoot);
+	RepairDataYamlFile(strRoot + _T("\\dataset"));
 	return true;
 }
 
