@@ -46,10 +46,48 @@ static bool CompressBytes(const std::vector<BYTE>& src, std::vector<BYTE>& dst)
 	return true;
 }
 
-static void WriteU64(BYTE* p, ULONGLONG v)
+static void WriteU32(BYTE* p, unsigned int v)
 {
-	for (int i = 0; i < 8; i++)
+	for (int i = 0; i < 4; i++)
 		p[i] = (BYTE)(v >> (8 * i));
+}
+
+// 读取类别表（UTF-8 文本，去掉 BOM 并统一为 \n 换行）
+static bool LoadClassTable(std::vector<BYTE>& table)
+{
+	table.clear();
+
+	CString strPath;
+	CString strDataset = GetProjectDatasetDir();
+	if (!strDataset.IsEmpty())
+		strPath = strDataset + _T("\\classes.txt");
+	if (strPath.IsEmpty() || !::PathFileExists(strPath))
+	{
+		CString strGreen = GetGreenRoot();
+		if (!strGreen.IsEmpty())
+			strPath = strGreen + _T("\\config\\classes.txt");
+	}
+	if (strPath.IsEmpty() || !::PathFileExists(strPath))
+		return false;
+
+	std::vector<BYTE> raw;
+	if (!ReadAllBytes(strPath, raw))
+		return false;
+
+	size_t nBegin = 0;
+	if (raw.size() >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF)
+		nBegin = 3;
+
+	for (size_t i = nBegin; i < raw.size(); i++)
+	{
+		if (raw[i] == '\r')
+			continue;
+		table.push_back(raw[i]);
+	}
+	while (!table.empty() && (table.back() == '\n' || table.back() == ' ' || table.back() == '\t'))
+		table.pop_back();
+
+	return !table.empty();
 }
 
 CPageTrain::CPageTrain(CWnd* pParent /*=nullptr*/)
@@ -717,25 +755,41 @@ bool CPageTrain::StartKeyoloPack()
 		return false;
 	}
 
+	std::vector<BYTE> clsTable;
+	if (!LoadClassTable(clsTable))
+		AppendLog(_T("未找到 classes.txt，.keyolo 中将不含类别表\r\n"));
+
 	CString strOut = strNcnnDir + _T(".keyolo");
 	if (::PathFileExists(strOut))
 		::DeleteFile(strOut);
 
-	// 头部: "YOLO" + 未压缩 bin/param 大小 + 压缩后 bin/param 大小（各 8 字节）
-	size_t nHeader = 4 + 8 * 4;
+	// 头部 (24 字节, 与 ModelPackHeader 对应): magic "YOLO"
+	// + 未压缩 bin/param 大小 + 压缩后 bin/param 大小 + 类别表大小（各 int32）
+	// data 区: 压缩 bin + 压缩 param + 类别表字符串
+	size_t nHeader = 4 + 4 * 5;
 	std::vector<BYTE> out;
-	out.resize(nHeader + binZip.size() + paramZip.size());
+	out.resize(nHeader + binZip.size() + paramZip.size() + clsTable.size());
 
 	out[0] = 'Y'; out[1] = 'O'; out[2] = 'L'; out[3] = 'O';
-	WriteU64(&out[4],  (ULONGLONG)binRaw.size());
-	WriteU64(&out[12], (ULONGLONG)paramRaw.size());
-	WriteU64(&out[20], (ULONGLONG)binZip.size());
-	WriteU64(&out[28], (ULONGLONG)paramZip.size());
+	WriteU32(&out[4],  (unsigned int)binRaw.size());
+	WriteU32(&out[8],  (unsigned int)paramRaw.size());
+	WriteU32(&out[12], (unsigned int)binZip.size());
+	WriteU32(&out[16], (unsigned int)paramZip.size());
+	WriteU32(&out[20], (unsigned int)clsTable.size());
 
+	size_t nOffset = nHeader;
 	if (!binZip.empty())
-		memcpy(&out[nHeader], binZip.data(), binZip.size());
+	{
+		memcpy(&out[nOffset], binZip.data(), binZip.size());
+		nOffset += binZip.size();
+	}
 	if (!paramZip.empty())
-		memcpy(&out[nHeader + binZip.size()], paramZip.data(), paramZip.size());
+	{
+		memcpy(&out[nOffset], paramZip.data(), paramZip.size());
+		nOffset += paramZip.size();
+	}
+	if (!clsTable.empty())
+		memcpy(&out[nOffset], clsTable.data(), clsTable.size());
 
 	// 末尾随机填充干扰数据
 	srand((unsigned)GetTickCount());
@@ -753,16 +807,19 @@ bool CPageTrain::StartKeyoloPack()
 		file.Write(out.data(), (UINT)out.size());
 	file.Close();
 
+	int nClassCount = 0;
+	if (!clsTable.empty())
+	{
+		nClassCount = 1;
+		for (size_t i = 0; i < clsTable.size(); i++)
+			if (clsTable[i] == '\n')
+				nClassCount++;
+	}
+
 	CString strMsg;
 	strMsg.Format(
-		_T("==== 打包完成: %s ====\r\n")
-		_T("bin: %I64u -> %I64u 字节\r\n")
-		_T("param: %I64u -> %I64u 字节\r\n")
-		_T("头部 %u 字节（YOLO 标识 + 4 个尺寸），末尾干扰数据 %d 字节\r\n"),
-		(LPCTSTR)strOut,
-		(ULONGLONG)binRaw.size(), (ULONGLONG)binZip.size(),
-		(ULONGLONG)paramRaw.size(), (ULONGLONG)paramZip.size(),
-		(unsigned)nHeader, nPad);
+		_T("==== 打包完成: %s ====\r\n类别表: %u 字节, %d 个类别\r\n"),
+		(LPCTSTR)strOut, (unsigned int)clsTable.size(), nClassCount);
 	AppendLog(strMsg);
 	return true;
 }
