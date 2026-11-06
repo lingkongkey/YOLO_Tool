@@ -52,7 +52,7 @@ static void WriteU32(BYTE* p, unsigned int v)
 		p[i] = (BYTE)(v >> (8 * i));
 }
 
-// 读取类别表（UTF-8 文本，去掉 BOM 并统一为 \n 换行）
+// 读取类别表并转成 GBK 字节（去掉 BOM，统一为 \n 换行）
 static bool LoadClassTable(std::vector<BYTE>& table)
 {
 	table.clear();
@@ -77,12 +77,38 @@ static bool LoadClassTable(std::vector<BYTE>& table)
 	size_t nBegin = 0;
 	if (raw.size() >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF)
 		nBegin = 3;
+	if (nBegin >= raw.size())
+		return false;
 
-	for (size_t i = nBegin; i < raw.size(); i++)
+	// UTF-8 转 GBK(CP_ACP)：classes.txt 为 UTF-8 时转换；本身已是 ANSI 时转换失败则直接用原字节
+	std::vector<BYTE> ansi;
 	{
-		if (raw[i] == '\r')
+		LPCSTR psz = (LPCSTR)&raw[nBegin];
+		int nLen = (int)(raw.size() - nBegin);
+
+		int nWide = ::MultiByteToWideChar(CP_UTF8, 0, psz, nLen, NULL, 0);
+		if (nWide > 0)
+		{
+			std::vector<wchar_t> wbuf((size_t)nWide);
+			::MultiByteToWideChar(CP_UTF8, 0, psz, nLen, wbuf.data(), nWide);
+
+			int nAnsi = ::WideCharToMultiByte(CP_ACP, 0, wbuf.data(), nWide, NULL, 0, NULL, NULL);
+			if (nAnsi > 0)
+			{
+				ansi.resize((size_t)nAnsi);
+				::WideCharToMultiByte(CP_ACP, 0, wbuf.data(), nWide, (LPSTR)ansi.data(), nAnsi, NULL, NULL);
+			}
+		}
+	}
+
+	const std::vector<BYTE>& src = ansi.empty() ? raw : ansi;
+	size_t nStart = ansi.empty() ? nBegin : 0;
+
+	for (size_t i = nStart; i < src.size(); i++)
+	{
+		if (src[i] == '\r')
 			continue;
-		table.push_back(raw[i]);
+		table.push_back(src[i]);
 	}
 	while (!table.empty() && (table.back() == '\n' || table.back() == ' ' || table.back() == '\t'))
 		table.pop_back();
@@ -773,7 +799,7 @@ bool CPageTrain::StartKeyoloPack()
 
 	// 头部 (24 字节, 与 ModelPackHeader 对应): magic "YOLO"
 	// + 未压缩 bin/param 大小 + 压缩后 bin/param 大小 + 类别表大小（各 int32）
-	// data 区: 压缩 bin + 压缩 param + 类别表字符串
+	// data 区: 压缩 bin + 压缩 param + 类别表字符串（GBK 编码）
 	size_t nHeader = 4 + 4 * 5;
 	std::vector<BYTE> out;
 	out.resize(nHeader + binZip.size() + paramZip.size() + clsTable.size());
