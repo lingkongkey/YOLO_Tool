@@ -28,6 +28,7 @@ protected:
 	afx_msg void OnBnClickedBtnTestRefresh();
 	afx_msg void OnBnClickedBtnTestDetect();
 	afx_msg void OnBnClickedBtnTestImage();
+	afx_msg void OnBnClickedBtnTestNcnn();
 	afx_msg void OnCbnSelchangeComboTestModel();
 	afx_msg LRESULT OnFinderPicked(WPARAM wParam, LPARAM lParam);
 	DECLARE_MESSAGE_MAP()
@@ -55,6 +56,8 @@ private:
 	void SetStatus(LPCTSTR lpszText);
 
 	void LoadResultImage();
+
+	CString RunNcnnDetect(const CString& strImagePath);
 
 	CPreviewStatic  m_wndPreview;      
 	CFinderStatic   m_wndFinder;       

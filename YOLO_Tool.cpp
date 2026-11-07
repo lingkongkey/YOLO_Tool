@@ -2,9 +2,9 @@
 //
 
 #include "pch.h"
-#include "framework.h"
 #include "YOLO_Tool.h"
 #include "YOLO_ToolDlg.h"
+
 
 #ifdef _DEBUG
 #define new DEBUG_NEW

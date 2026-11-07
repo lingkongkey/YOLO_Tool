@@ -1,13 +1,14 @@
 ﻿// YOLO_ToolDlg.cpp:
 //
 
+
 #include "pch.h"
-#include "framework.h"
 #include "YOLO_Tool.h"
 #include "YOLO_ToolDlg.h"
 #include "UiUtil.h"
 #include "AppConfig.h"
 #include "afxdialogex.h"
+
 
 #ifdef _DEBUG
 #define new DEBUG_NEW

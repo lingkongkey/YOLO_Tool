@@ -457,12 +457,60 @@ CString GetProjectOutputDir()
 	return strGreen + _T("\\output\\ui");
 }
 
+// 从目录名解析训练序号：train -> 1，train2 -> 2，train3 -> 3；不匹配返回 0
+static int ParseTrainRunNumber(const CString& strName)
+{
+	if (strName == _T("train"))
+		return 1;
+	if (strName.GetLength() <= 5 || strName.Left(5) != _T("train"))
+		return 0;
+	CString strNum = strName.Mid(5);
+	if (strNum.IsEmpty())
+		return 0;
+	for (int i = 0; i < strNum.GetLength(); i++)
+	{
+		TCHAR ch = strNum[i];
+		if (ch < _T('0') || ch > _T('9'))
+			return 0;
+	}
+	return _ttoi(strNum);
+}
+
 CString GetBestWeightPath()
 {
 	CString strRuns = GetProjectRunsDir();
 	if (strRuns.IsEmpty())
 		return _T("");
-	return strRuns + _T("\\train\\weights\\best.pt");
+
+	// 遍历 runs/detect 下所有子目录，找出编号最大的 trainN（train 视为 1）
+	CString strLatest;
+	int nMaxNum = 0;
+	{
+		CFileFind finder;
+		BOOL bMore = finder.FindFile(strRuns + _T("\\*"));
+		while (bMore)
+		{
+			bMore = finder.FindNextFile();
+			if (!finder.IsDirectory() || finder.IsDots())
+				continue;
+			CString strName = finder.GetFileName();
+			int nNum = ParseTrainRunNumber(strName);
+			if (nNum <= 0)
+				continue;
+			if (nNum > nMaxNum)
+			{
+				nMaxNum = nNum;
+				strLatest = strName;
+			}
+		}
+		finder.Close();
+	}
+
+	// 未找到任何 train 目录时回退到 train（保持原行为，调用方会再做存在性校验）
+	if (strLatest.IsEmpty())
+		strLatest = _T("train");
+
+	return strRuns + _T("\\") + strLatest + _T("\\weights\\best.pt");
 }
 
 CString GetDatasetDir()

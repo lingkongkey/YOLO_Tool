@@ -10,8 +10,11 @@
 #include "afxdialogex.h"
 #include <shlwapi.h>
 #include <vector>
+
 #include "File/zlib/zlib.h"
 #pragma comment(lib, "shlwapi.lib")
+#pragma comment(lib, "zlib.lib")
+
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -303,8 +306,11 @@ void CPageTrain::Layout()
 	mv(IDC_CHK_RESUME, rightX + 10, M + 168, RIGHTW - 20, 18);
 	mv(IDC_CHK_GPU, rightX + 10, M + 192, RIGHTW - 20, 18);
 
+	;
+
 	mv(IDC_LBL_EXPORT_FMT, rightX + 10, M + 268, RIGHTW - 20, 18);
 	mv(IDC_COMBO_EXPORT_FMT, rightX + 10, M + 292, RIGHTW - 54, 25);
+
 	mv(IDC_BTN_EXPORT, rightX + 10, M + 322, RIGHTW - 180, 30);
 	int btnW = (RIGHTW - 28) / 2;
 	int btnY = M + colH - 8 - 30;
@@ -470,14 +476,15 @@ void CPageTrain::FillExportFormats()
 	if (pCombo == NULL)
 		return;
 	pCombo->ResetContent();
-	pCombo->AddString(_T("NCNN"));
 	pCombo->AddString(_T("KEYOLO"));
+	pCombo->AddString(_T("NCNN"));
 	pCombo->AddString(_T("ONNX"));
 	pCombo->AddString(_T("TorchScript"));
 	pCombo->AddString(_T("TensorRT"));
 	pCombo->AddString(_T("TFLite"));
 	pCombo->AddString(_T("OpenVINO"));
 	pCombo->AddString(_T("TensorFlow"));
+	
 	pCombo->SetCurSel(0);
 }
 
@@ -732,7 +739,7 @@ bool CPageTrain::StartKeyoloPack()
 		if (!strDir.IsEmpty())
 		{
 			CFileFind finder;
-			BOOL bMore = finder.FindFile(strDir + _T("*_ncnn"));
+			BOOL bMore = finder.FindFile(strDir + _T("*_ncnn_model"));
 			while (bMore)
 			{
 				bMore = finder.FindNextFile();
@@ -782,8 +789,12 @@ bool CPageTrain::StartKeyoloPack()
 		return false;
 	}
 
-	std::vector<BYTE> binZip, paramZip;
-	if (!CompressBytes(binRaw, binZip) || !CompressBytes(paramRaw, paramZip))
+	std::vector<BYTE> z_file(binRaw.size()+ paramRaw.size());
+	memcpy(z_file.data(), binRaw.data(), binRaw.size());
+	memcpy(z_file.data()+ binRaw.size(), paramRaw.data(), paramRaw.size());
+
+	std::vector<BYTE> binZip;
+	if (!CompressBytes(z_file, binZip))
 	{
 		AppendLog(_T("zlib 压缩失败\r\n"));
 		return false;
@@ -792,44 +803,43 @@ bool CPageTrain::StartKeyoloPack()
 	std::vector<BYTE> clsTable;
 	if (!LoadClassTable(clsTable))
 		AppendLog(_T("未找到 classes.txt，.keyolo 中将不含类别表\r\n"));
+	long pos = strNcnnDir.ReverseFind(_T('\\'));
 
-	CString strOut = strNcnnDir + _T(".keyolo");
-	if (::PathFileExists(strOut))
-		::DeleteFile(strOut);
-
-	// 头部 (24 字节, 与 ModelPackHeader 对应): magic "YOLO"
-	// + 未压缩 bin/param 大小 + 压缩后 bin/param 大小 + 类别表大小（各 int32）
-	// data 区: 压缩 bin + 压缩 param + 类别表字符串（GBK 编码）
-	size_t nHeader = 4 + 4 * 5;
-	std::vector<BYTE> out;
-	out.resize(nHeader + binZip.size() + paramZip.size() + clsTable.size());
-
-	out[0] = 'Y'; out[1] = 'O'; out[2] = 'L'; out[3] = 'O';
-	WriteU32(&out[4],  (unsigned int)binRaw.size());
-	WriteU32(&out[8],  (unsigned int)paramRaw.size());
-	WriteU32(&out[12], (unsigned int)binZip.size());
-	WriteU32(&out[16], (unsigned int)paramZip.size());
-	WriteU32(&out[20], (unsigned int)clsTable.size());
-
-	size_t nOffset = nHeader;
-	if (!binZip.empty())
+#pragma pack(push, 1)
+	typedef struct _ModelPackHeader
 	{
-		memcpy(&out[nOffset], binZip.data(), binZip.size());
-		nOffset += binZip.size();
-	}
-	if (!paramZip.empty())
-	{
-		memcpy(&out[nOffset], paramZip.data(), paramZip.size());
-		nOffset += paramZip.size();
-	}
-	if (!clsTable.empty())
-		memcpy(&out[nOffset], clsTable.data(), clsTable.size());
+		int32_t magic;
+		int32_t bin_raw_size;
+		int32_t param_raw_size;
+		int32_t binZip_size;
+		int32_t table_size;
+		char data;
+	}ModelPackHeader, * PModelPackHeader;
+#pragma pack(pop)
 
-	// 末尾随机填充干扰数据
+	ModelPackHeader  t_ModelPackHeader;
+	t_ModelPackHeader.magic = 0x4F4C4F59;
+	t_ModelPackHeader.bin_raw_size = binRaw.size();
+	t_ModelPackHeader.param_raw_size = paramRaw.size();
+	t_ModelPackHeader.binZip_size = binZip.size();
+	t_ModelPackHeader.table_size = clsTable.size();
+
+	std::string  str = (char*)clsTable.data();
 	srand((unsigned)GetTickCount());
 	int nPad = 16 + rand() % 241;
-	for (int i = 0; i < nPad; i++)
-		out.push_back((BYTE)(rand() & 0xFF));
+
+	std::vector<BYTE> SVAE_file(sizeof(ModelPackHeader) + t_ModelPackHeader.binZip_size+ t_ModelPackHeader.table_size+ nPad);
+
+	memcpy(SVAE_file.data(),&t_ModelPackHeader, sizeof(ModelPackHeader));
+	PModelPackHeader p = (PModelPackHeader)SVAE_file.data();
+	memcpy(&p->data, binZip.data(), t_ModelPackHeader.binZip_size);
+	memcpy(&p->data+ t_ModelPackHeader.binZip_size, clsTable.data(), t_ModelPackHeader.table_size);
+
+
+
+	CString strOut = strNcnnDir.Mid(0,pos+1) + _T("ncnn.keyolo");
+	if (::PathFileExists(strOut))
+		::DeleteFile(strOut);
 
 	CFile file;
 	if (!file.Open(strOut, CFile::modeCreate | CFile::modeWrite | CFile::shareExclusive))
@@ -837,8 +847,8 @@ bool CPageTrain::StartKeyoloPack()
 		AppendLog(_T("创建 .keyolo 文件失败\r\n"));
 		return false;
 	}
-	if (!out.empty())
-		file.Write(out.data(), (UINT)out.size());
+	if (!SVAE_file.empty())
+		file.Write(SVAE_file.data(), (UINT)SVAE_file.size());
 	file.Close();
 
 	int nClassCount = 0;
@@ -852,7 +862,7 @@ bool CPageTrain::StartKeyoloPack()
 
 	CString strMsg;
 	strMsg.Format(
-		_T("==== 打包完成: %s ====\r\n类别表: %u 字节, %d 个类别\r\n"),
+		_T("==== 打包完成: %s\r\n"),
 		(LPCTSTR)strOut, (unsigned int)clsTable.size(), nClassCount);
 	AppendLog(strMsg);
 	return true;
