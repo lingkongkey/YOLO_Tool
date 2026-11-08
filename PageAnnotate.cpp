@@ -19,6 +19,7 @@
 extern std::vector<char> HttpPost(const std::wstring& wstrUrl, const char* pUtf8Body, DWORD dwBodyLen, const std::wstring& wstrAuthHeader, DWORD& dwCode);
 extern std::string ImageToJpegBase64(LPCTSTR szPath, LONG nMaxLongSide , ULONG nQuality);
 extern bool GetImageSize(LPCTSTR szPath, LONG& nWidth, LONG& nHeight);
+HWND g_apikey = 0, g_apikey1 = 0, g_apikey2 = 0, g_apikey3 = 0;
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -647,6 +648,15 @@ BOOL CPageAnnotate::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
 
+	CEdit* p = (CEdit *) GetDlgItem(IDC_EDIT_AI_KEY);
+	g_apikey = p->m_hWnd;
+	p = (CEdit*)GetDlgItem(IDC_EDIT_AI_MODEL);
+	g_apikey1 = p->m_hWnd;
+	p = (CEdit*)GetDlgItem(IDC_EDIT_CLASSES);
+	g_apikey2 = p->m_hWnd;
+	p = (CEdit*)GetDlgItem(IDC_EDIT_CONF);
+	g_apikey3 = p->m_hWnd;
+
 	CAppConfig& cfg = CAppConfig::Instance();
 
 	FillWeightsCombo();
@@ -727,73 +737,85 @@ void CPageAnnotate::OnSize(UINT nType, int cx, int cy)
 
 BOOL CPageAnnotate::PreTranslateMessage(MSG* pMsg)
 {
-
-	if (UiForwardEditPaste(pMsg))
-		return TRUE;
-
-	if (pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_RETURN &&
-		!UiIsMultilineEdit(pMsg->hwnd) &&
-		!UiIsEditControl(pMsg->hwnd) &&
-		(pMsg->lParam & 0x40000000) == 0)
+	HWND t_hwnd= ::GetFocus();
+	if (t_hwnd==g_apikey||t_hwnd == g_apikey1 || t_hwnd == g_apikey2 || t_hwnd == g_apikey3)
 	{
-		SaveAndNext();
-		return TRUE;
-	}
-
-	if (UiSwallowDialogKey(pMsg))
-		return TRUE;
-
-	if (pMsg->message == WM_KEYDOWN && pMsg->wParam == _T('S') &&
-		(::GetKeyState(VK_CONTROL) & 0x8000) != 0 &&
-		(pMsg->lParam & 0x40000000) == 0)
-	{
-		SaveAndNext();
-		return TRUE;
-	}
-
-
-	if (pMsg->message == WM_KEYDOWN && pMsg->wParam == _T('Z') &&
-		(::GetKeyState(VK_CONTROL) & 0x8000) != 0 &&
-		(pMsg->lParam & 0x40000000) == 0 &&
-		!UiIsEditControl(pMsg->hwnd))
-	{
-		if (m_canvas.Undo())
-			SetStatus(_T("已撤销"));
-		else
-			SetStatus(_T("没有可撤销的"));
-		return TRUE;
-	}
-
-	if (pMsg->message == WM_KEYDOWN &&
-		pMsg->wParam >= _T('0') && pMsg->wParam <= _T('9') &&
-		(::GetKeyState(VK_CONTROL) & 0x8000) == 0 &&
-		(::GetKeyState(VK_MENU) & 0x8000) == 0 &&
-		(::GetKeyState(VK_SHIFT) & 0x8000) == 0 &&
-		!UiIsEditControl(pMsg->hwnd))
-	{
-		int nClass = (int)(pMsg->wParam - _T('0'));
-		CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_CLASSES);
-		if (pCombo != NULL && pCombo->GetCount() > 0)
+		if (t_hwnd== g_apikey2)
 		{
+			return CDialogEx::PreTranslateMessage(pMsg);
+		}
+		if (pMsg->message == WM_KEYDOWN && (pMsg->wParam == VK_RETURN|| pMsg->wParam == VK_ESCAPE))
+		{
+			return TRUE;
+		}
+		
+	}
+	else
+	{
+		if (pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_RETURN &&!UiIsEditControl(pMsg->hwnd) &&(pMsg->lParam & 0x40000000) == 0) //回车保存
+		{
+			SaveAndNext();
+			return TRUE;
+		}
 
-			if (nClass >= 0 && nClass < pCombo->GetCount())
+		if (pMsg->message == WM_KEYDOWN && pMsg->wParam == _T('S') &&    (::GetKeyState(VK_CONTROL) & 0x8000) != 0 &&(pMsg->lParam & 0x40000000) == 0)  //CTRL+S保存
+		{
+			SaveAndNext();
+			return TRUE;
+		}
+
+		if (pMsg->message == WM_KEYDOWN && pMsg->wParam == _T('Z') &&(::GetKeyState(VK_CONTROL) & 0x8000) != 0 &&(pMsg->lParam & 0x40000000) == 0)   //CTRL+Z撤销
+		{
+			if (m_canvas.Undo())
 			{
-				pCombo->SetCurSel(nClass);
-				m_canvas.SetClassIndex(nClass);
-				CString strName;
-				pCombo->GetLBText(nClass, strName);
-				CString strTip;
-				SetStatus(strTip);
+				SetStatus(_T("已撤销"));
 			}
 			else
 			{
-				int nMax = min(9, (int)pCombo->GetCount() - 1);
-				CString strTip;
-				SetStatus(strTip);
+				SetStatus(_T("没有可撤销的"));
+				return TRUE;
 			}
-			return TRUE;
 		}
+
+		if (pMsg->message == WM_KEYDOWN &&(pMsg->wParam >= '0' && pMsg->wParam <= '9') &&(::GetKeyState(VK_CONTROL) & 0x8000) == 0   //0--9类别快捷键
+			&&(::GetKeyState(VK_MENU) & 0x8000) == 0 &&(::GetKeyState(VK_SHIFT) & 0x8000) == 0 )
+		{
+			int nClass = (int)(pMsg->wParam - _T('0'));
+			CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_CLASSES);
+			if (pCombo != NULL && pCombo->GetCount() > 0)
+			{
+
+				if (nClass >= 0 && nClass < pCombo->GetCount())
+				{
+					pCombo->SetCurSel(nClass);
+					m_canvas.SetClassIndex(nClass);
+					CString strName;
+					pCombo->GetLBText(nClass, strName);
+					CString strTip;
+					SetStatus(strTip);
+				}
+				else
+				{
+					int nMax = min(9, (int)pCombo->GetCount() - 1);
+					CString strTip;
+					SetStatus(strTip);
+				}
+				return TRUE;
+			}
+		}
+
 	}
+	
+
+	
+
+
+
+
+
+	
+
+	
 
 	if (pMsg->message == WM_KEYDOWN && pMsg->wParam == _T('A') &&
 		(::GetKeyState(VK_CONTROL) & 0x8000) != 0 &&

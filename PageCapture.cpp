@@ -207,6 +207,17 @@ void CPageCapture::UpdateTargetTitle()
 	SetDlgItemText(IDC_EDIT_TITLE, szTitle);
 }
 
+static	void FillSoRect(HDC m_hDC, LPCRECT lpRect, COLORREF clr)
+{
+	if (m_hDC == NULL || IsRectEmpty(lpRect))
+	{
+		return;
+	}
+
+	::SetBkColor(m_hDC, clr);
+	::ExtTextOut(m_hDC, 0, 0, ETO_OPAQUE, lpRect, NULL, 0, NULL);
+}
+
 bool CPageCapture::CaptureWindowToImage(HWND hwnd, bool bClientOnly, CImage& image)
 {
 	if (!::IsWindow(hwnd))
@@ -223,24 +234,38 @@ bool CPageCapture::CaptureWindowToImage(HWND hwnd, bool bClientOnly, CImage& ima
 	if (w < 8 || h < 8)
 		return false;
 
-	HDC hdcWindow = bClientOnly ? ::GetDC(hwnd) : ::GetWindowDC(hwnd);
-	if (hdcWindow == NULL)
+	HDC hWndDC = ::GetDC(hwnd);
+	if (!hWndDC) return false;
+
+
+	HDC hMemDC = CreateCompatibleDC(hWndDC);
+	HBITMAP hBmp = CreateCompatibleBitmap(hWndDC, w, h);
+	if (!hMemDC || !hBmp)
+	{
+		::ReleaseDC(hwnd, hWndDC);
+		if (hMemDC) DeleteDC(hMemDC);
+		if (hBmp) DeleteObject(hBmp);
 		return false;
+	}
 
-	HDC hdcMem = ::CreateCompatibleDC(hdcWindow);
-	HBITMAP hBitmap = ::CreateCompatibleBitmap(hdcWindow, w, h);
-	HGDIOBJ hOld = ::SelectObject(hdcMem, hBitmap);
-
-	UINT nFlags = bClientOnly ? PW_CLIENTONLY : 0;
-	if (!::PrintWindow(hwnd, hdcMem, nFlags))
-		::BitBlt(hdcMem, 0, 0, w, h, hdcWindow, 0, 0, SRCCOPY);
-
-	::SelectObject(hdcMem, hOld);
-	::DeleteDC(hdcMem);
-	::ReleaseDC(hwnd, hdcWindow);
-
+	HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, hBmp);
+	RECT rct = { 0,0,w ,h };
+	FillSoRect(hMemDC, &rct, RGB(255, 0, 0));
+	if (!BitBlt(hMemDC, 0, 0, w, h, hWndDC, 0,0, SRCCOPY))
+	{
+		SelectObject(hMemDC, hOldBmp);
+		DeleteObject(hBmp);
+		DeleteDC(hMemDC);
+		::ReleaseDC(hwnd, hWndDC);
+		return false;
+	}
+	
+	
+	SelectObject(hMemDC, hOldBmp);
+	::ReleaseDC(hwnd, hWndDC);
+	DeleteDC(hMemDC);
 	image.Destroy();
-	image.Attach(hBitmap);  
+	image.Attach(hBmp);
 	return true;
 }
 
@@ -338,7 +363,7 @@ bool CPageCapture::CaptureOnce()
 	SYSTEMTIME st;
 	::GetLocalTime(&st);
 	CString strFile;
-	strFile.Format(_T("%s\\cap_%04d%02d%02d_%02d%02d%02d_%03d.jpg"),
+	strFile.Format(_T("%s\\%04d%02d%02d_%02d%02d%02d_%03d.jpg"),
 		(LPCTSTR)m_strSaveDir,
 		st.wYear, st.wMonth, st.wDay,
 		st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
