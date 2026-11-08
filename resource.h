@@ -1,6 +1,6 @@
 ﻿//{{NO_DEPENDENCIES}}
-// Microsoft Visual C++ ���ɵİ����ļ���
-// �� YOLO_Tool.rc ʹ��
+// Microsoft Visual C++ 生成的包含文件。
+// 供 YOLO_Tool.rc 使用
 //
 #define IDD_YOLO_TOOL_DIALOG            102
 #define IDR_MAINFRAME                   128
@@ -8,6 +8,7 @@
 #define IDD_PAGE_ANNOTATE               201
 #define IDD_PAGE_TRAIN                  202
 #define IDD_PAGE_TEST                   203
+#define IDD_CLOSE_CHOICE                204
 #define IDC_EDIT_HANDLE                 1000
 #define IDC_BTN_CHECK                   1001
 #define IDC_FINDER                      1002
@@ -72,11 +73,15 @@
 #define IDC_ANNO_CANVAS                 1148
 #define IDC_GRP_IMAGES                  1149
 #define IDC_BTN_EXPORT                  1150
+#define IDC_LIST_CAPTURES               1151
 #define IDC_CHK_RESUME                  1152
 #define IDC_CHK_GPU                     1153
 #define IDC_COMBO_EXPORT_FMT            1154
 #define IDC_LBL_EXPORT_FMT              1155
-#define IDC_LIST_CAPTURES               1151
+#define IDC_LBL_AI_KEY                  1156
+#define IDC_EDIT_AI_KEY                 1157
+#define IDC_BTN_AI_ANNOTATE             1158
+#define IDC_COMBO_AI_PROVIDER           1159
 #define IDC_LBL_TEST_MODEL              1160
 #define IDC_COMBO_TEST_MODEL            1161
 #define IDC_LBL_TEST_IMGSZ              1162
@@ -97,22 +102,23 @@
 #define IDC_STATIC_TEST_ZOOM            1180
 #define IDC_PREVIEW_TEST                1181
 #define IDC_STATIC_TEST_STATUS          1182
-#define IDC_BTN_TEST_IMAGE              1185
-#define IDC_BTN_TEST_NCNN               1186
-#define IDC_LBL_AI_KEY                  1156
-#define IDC_EDIT_AI_KEY                 1157
-#define IDC_BTN_AI_ANNOTATE             1158
-#define IDC_COMBO_AI_PROVIDER           1159
 #define IDC_LBL_AI_MODEL                1183
 #define IDC_EDIT_AI_MODEL               1184
+#define IDC_BTN_TEST_IMAGE              1185
+#define IDC_BTN_TEST_NCNN               1186
+#define IDC_CHECK1                      1187
+#define IDC_CHK_EXIT                    1187
+#define IDC_CLOSE_TRAY                  1188
+#define IDC_CLOSE_EXIT                  1189
+#define IDC_CLOSE_NOASK                 1190
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        203
+#define _APS_NEXT_RESOURCE_VALUE        205
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1187
+#define _APS_NEXT_CONTROL_VALUE         1191
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

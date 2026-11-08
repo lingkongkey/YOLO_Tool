@@ -55,6 +55,7 @@ BEGIN_MESSAGE_MAP(CPageAnnotate, CDialogEx)
 	ON_MESSAGE(WM_USER_AI_RESULT, &CPageAnnotate::OnAiResult)
 
 	ON_WM_HELPINFO()
+	ON_WM_CTLCOLOR()
 END_MESSAGE_MAP()
 
 static bool ReadUtf8File(const CString& strPath, CString& strText)
@@ -656,6 +657,8 @@ BOOL CPageAnnotate::OnInitDialog()
 	g_apikey2 = p->m_hWnd;
 	p = (CEdit*)GetDlgItem(IDC_EDIT_CONF);
 	g_apikey3 = p->m_hWnd;
+	p = (CEdit*)GetDlgItem(IDC_EDIT_LOG_ANN);
+	p->SetReadOnly(TRUE);
 
 	CAppConfig& cfg = CAppConfig::Instance();
 
@@ -2260,4 +2263,18 @@ BOOL CPageAnnotate::OnHelpInfo(HELPINFO* pHelpInfo)
 {
 
 	return 1;
+}
+
+
+HBRUSH CPageAnnotate::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
+{
+	HBRUSH hbr = CDialogEx::OnCtlColor(pDC, pWnd, nCtlColor);
+	if (pWnd->GetDlgCtrlID() == IDC_EDIT_LOG_ANN)
+	{
+		pDC->SetTextColor(RGB(255, 255, 255)); 
+		pDC->SetBkMode(TRANSPARENT);           
+		static CBrush brushBlack(RGB(0, 0, 0));
+		return brushBlack;
+	}
+	return hbr;
 }

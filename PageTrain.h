@@ -67,4 +67,6 @@ protected:
 	afx_msg LRESULT OnProcExit(WPARAM wParam, LPARAM lParam);
 	long m_Maxline=0; 
 	long m_line=0;	
+public:
+	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
 };

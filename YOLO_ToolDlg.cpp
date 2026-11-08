@@ -14,12 +14,70 @@
 #define new DEBUG_NEW
 #endif
 
+// 托盘图标回调消息与右键菜单命令
+#define WM_TRAYICON_CALLBACK (WM_USER + 200)
+#define IDM_TRAY_SHOW        40001
+#define IDM_TRAY_EXIT        40002
+#define TRAY_ICON_ID         1
+
+
+// 关闭方式选择对话框（带「不再询问」选项）
+class CCloseChoiceDlg : public CDialogEx
+{
+public:
+	CCloseChoiceDlg(CWnd* pParent = nullptr)
+		: CDialogEx(IDD_CLOSE_CHOICE, pParent)
+		, m_nAction(0)
+		, m_nNoAsk(0)
+	{
+	}
+
+	enum { IDD = IDD_CLOSE_CHOICE };
+
+	int m_nAction;  // 0=取消，1=最小化到托盘，2=退出程序
+	int m_nNoAsk;   // 是否勾选「不再询问」
+
+protected:
+	virtual void DoDataExchange(CDataExchange* pDX)
+	{
+		CDialogEx::DoDataExchange(pDX);
+		DDX_Check(pDX, IDC_CLOSE_NOASK, m_nNoAsk);
+	}
+
+	afx_msg void OnBnClickedTray()
+	{
+		if (!UpdateData(TRUE))
+			return;
+		m_nAction = 1;
+		EndDialog(IDOK);
+	}
+
+	afx_msg void OnBnClickedExit()
+	{
+		if (!UpdateData(TRUE))
+			return;
+		m_nAction = 2;
+		EndDialog(IDOK);
+	}
+
+	DECLARE_MESSAGE_MAP()
+};
+
+BEGIN_MESSAGE_MAP(CCloseChoiceDlg, CDialogEx)
+	ON_BN_CLICKED(IDC_CLOSE_TRAY, &CCloseChoiceDlg::OnBnClickedTray)
+	ON_BN_CLICKED(IDC_CLOSE_EXIT, &CCloseChoiceDlg::OnBnClickedExit)
+END_MESSAGE_MAP()
+
 
 // CYOLOToolDlg 
 CYOLOToolDlg::CYOLOToolDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_YOLO_TOOL_DIALOG, pParent)
 	, m_nCurPage(-1)
+	, m_hTrayIcon(nullptr)
+	, m_bTrayAdded(false)
+	, m_bExiting(false)
 {
+	ZeroMemory(&m_nid, sizeof(m_nid));
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
 
@@ -34,7 +92,9 @@ BEGIN_MESSAGE_MAP(CYOLOToolDlg, CDialogEx)
 	ON_WM_QUERYDRAGICON()
 	ON_WM_SIZE()
 	ON_WM_GETMINMAXINFO()
+	ON_WM_DESTROY()
 	ON_NOTIFY(TCN_SELCHANGE, IDC_TAB, &CYOLOToolDlg::OnTcnSelchangeTab)
+	ON_MESSAGE(WM_TRAYICON_CALLBACK, &CYOLOToolDlg::OnTrayIcon)
 	ON_WM_HELPINFO()
 	ON_WM_CLOSE()
 END_MESSAGE_MAP()
@@ -79,6 +139,8 @@ BOOL CYOLOToolDlg::OnInitDialog()
 	m_tab.SetCurSel(0);
 	ShowPage(0);
 
+	InitTrayIcon();
+
 	return TRUE;
 }
 
@@ -97,6 +159,14 @@ BOOL CYOLOToolDlg::PreTranslateMessage(MSG* pMsg)
 void CYOLOToolDlg::OnSize(UINT nType, int cx, int cy)
 {
 	CDialogEx::OnSize(nType, cx, cy);
+
+	// 最小化时隐藏到托盘，而不是占用任务栏
+	if (nType == SIZE_MINIMIZED && !m_bExiting)
+	{
+		HideToTray();
+		return;
+	}
+
 	CTabCtrl* p = (CTabCtrl*)GetDlgItem(IDC_TAB);
 	if (p)
 	{
@@ -182,7 +252,152 @@ BOOL CYOLOToolDlg::OnHelpInfo(HELPINFO* pHelpInfo)
 
 void CYOLOToolDlg::OnClose()
 {
+	if (!m_bExiting)
+	{
+		int nAction = 0;
+		CString strSaved = CAppConfig::Instance().strCloseAction;
+		if (strSaved == _T("tray"))
+			nAction = 1;
+		else if (strSaved == _T("exit"))
+			nAction = 2;
+		else
+			nAction = AskCloseAction();
+
+		if (nAction == 0)
+			return;
+		if (nAction == 1)
+		{
+			HideToTray();
+			return;
+		}
+	}
+
+	m_bExiting = true;
 	m_pageAnnotate.SaveConfig();
 	CAppConfig::Instance().SaveAll();
+	RemoveTrayIcon();
 	CDialogEx::OnClose();
+}
+
+void CYOLOToolDlg::OnDestroy()
+{
+	RemoveTrayIcon();
+	CDialogEx::OnDestroy();
+}
+
+void CYOLOToolDlg::InitTrayIcon()
+{
+	if (m_bTrayAdded)
+		return;
+
+	// 优先使用小图标，托盘显示更清晰
+	m_hTrayIcon = (HICON)::LoadImage(AfxGetInstanceHandle(), MAKEINTRESOURCE(IDR_MAINFRAME),
+		IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
+	if (m_hTrayIcon == nullptr)
+		m_hTrayIcon = m_hIcon;
+
+	ZeroMemory(&m_nid, sizeof(m_nid));
+	m_nid.cbSize = sizeof(m_nid);
+	m_nid.hWnd = GetSafeHwnd();
+	m_nid.uID = TRAY_ICON_ID;
+	m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+	m_nid.uCallbackMessage = WM_TRAYICON_CALLBACK;
+	m_nid.hIcon = m_hTrayIcon;
+	lstrcpyn(m_nid.szTip, _T("YOLO 综合工具"), _countof(m_nid.szTip));
+
+	m_bTrayAdded = (::Shell_NotifyIcon(NIM_ADD, &m_nid) == TRUE);
+}
+
+void CYOLOToolDlg::RemoveTrayIcon()
+{
+	if (m_bTrayAdded)
+	{
+		::Shell_NotifyIcon(NIM_DELETE, &m_nid);
+		m_bTrayAdded = false;
+	}
+	if (m_hTrayIcon != nullptr && m_hTrayIcon != m_hIcon)
+	{
+		::DestroyIcon(m_hTrayIcon);
+		m_hTrayIcon = nullptr;
+	}
+}
+
+void CYOLOToolDlg::HideToTray()
+{
+	InitTrayIcon();
+	if (!m_bTrayAdded)
+		return; // 托盘图标创建失败时保持窗口原状，避免窗口无法找回
+
+	ShowWindow(SW_HIDE);
+}
+
+void CYOLOToolDlg::RestoreFromTray()
+{
+	ShowWindow(SW_RESTORE);
+	::SetForegroundWindow(GetSafeHwnd());
+}
+
+int CYOLOToolDlg::AskCloseAction()
+{
+	CCloseChoiceDlg dlg(this);
+	if (dlg.DoModal() != IDOK || dlg.m_nAction == 0)
+		return 0;
+
+	// 勾选「不再询问」时记住选择，写入 app_config.ini
+	if (dlg.m_nNoAsk == BST_CHECKED)
+	{
+		CAppConfig& cfg = CAppConfig::Instance();
+		cfg.strCloseAction = (dlg.m_nAction == 1) ? _T("tray") : _T("exit");
+		cfg.SaveAll();
+	}
+
+	return dlg.m_nAction;
+}
+
+LRESULT CYOLOToolDlg::OnTrayIcon(WPARAM wParam, LPARAM lParam)
+{
+	if (wParam != TRAY_ICON_ID)
+		return 0;
+
+	// 双击左键托盘图标：还原窗口
+	if (lParam == WM_LBUTTONDBLCLK)
+	{
+		RestoreFromTray();
+		return 0;
+	}
+
+	// 右键托盘图标弹出菜单：还原 / 退出
+	if (lParam == WM_RBUTTONUP || lParam == WM_CONTEXTMENU)
+	{
+		CMenu menu;
+		if (!menu.CreatePopupMenu())
+			return 0;
+		menu.AppendMenu(MF_STRING, IDM_TRAY_SHOW, _T("还原"));
+		menu.AppendMenu(MF_SEPARATOR, 0, (LPCTSTR)nullptr);
+		menu.AppendMenu(MF_STRING, IDM_TRAY_EXIT, _T("退出"));
+
+		CPoint pt;
+		::GetCursorPos(&pt);
+		::SetForegroundWindow(GetSafeHwnd());
+
+		UINT nCmd = (UINT)menu.TrackPopupMenu(
+			TPM_LEFTALIGN | TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
+			pt.x, pt.y, this);
+		PostMessage(WM_NULL);
+		menu.DestroyMenu();
+
+		if (nCmd == IDM_TRAY_SHOW)
+		{
+			RestoreFromTray();
+		}
+		else if (nCmd == IDM_TRAY_EXIT)
+		{
+			// 不能在这里同步调用 OnClose：托盘回调中同步销毁对话框后模态循环不会退出，
+			// 进程会残留在后台。投递 WM_CLOSE，交由消息循环正常关闭。
+			m_bExiting = true;
+			PostMessage(WM_CLOSE);
+		}
+	}
+
+	return 0;
 }

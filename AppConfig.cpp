@@ -1,4 +1,4 @@
-// AppConfig.cpp: unified config implementation
+﻿// AppConfig.cpp: unified config implementation
 //
 #include "pch.h"
 #include "framework.h"
@@ -32,6 +32,8 @@ void CAppConfig::SetDefaults()
 	strAiModel    = _T("");
 
 	strTestModel  = _T("");
+
+	strCloseAction = _T("");
 }
 
 bool CAppConfig::EnsureIniOpen()
@@ -98,6 +100,8 @@ bool CAppConfig::LoadAll()
 
 	strTestModel   = ReadStr("Test", "Model",          strTestModel);
 
+	strCloseAction = ReadStr("Ui", "CloseAction", strCloseAction);
+
 	return true;
 }
 
@@ -112,6 +116,8 @@ bool CAppConfig::SaveAll()
 	WriteStr("Annotate", "AiModel",     strAiModel);
 
 	WriteStr("Test",     "Model",       strTestModel);
+
+	WriteStr("Ui",       "CloseAction", strCloseAction);
 
 	return true;
 }

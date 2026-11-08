@@ -55,6 +55,34 @@ static void WriteU32(BYTE* p, unsigned int v)
 		p[i] = (BYTE)(v >> (8 * i));
 }
 
+// 训练完成后的自动关机：启用关机特权并延时关机，用户可在命令行执行 shutdown /a 取消
+static bool ShutdownComputer(int nDelaySeconds)
+{
+	HANDLE hToken = NULL;
+	if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
+		return false;
+
+	bool bOk = false;
+	TOKEN_PRIVILEGES tkp = { 0 };
+	tkp.PrivilegeCount = 1;
+	tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+	if (::LookupPrivilegeValue(NULL, SE_SHUTDOWN_NAME, &tkp.Privileges[0].Luid))
+	{
+		::SetLastError(ERROR_SUCCESS);
+		bOk = (::AdjustTokenPrivileges(hToken, FALSE, &tkp, sizeof(tkp), NULL, NULL) != FALSE
+			&& ::GetLastError() == ERROR_SUCCESS);
+	}
+	::CloseHandle(hToken);
+
+	if (!bOk)
+		return false;
+
+	return ::InitiateSystemShutdownExW(NULL,
+		L"训练已完成，电脑将在倒计时结束后关机。如需取消，请在命令行执行 shutdown /a",
+		(DWORD)nDelaySeconds, FALSE, FALSE,
+		SHTDN_REASON_MAJOR_APPLICATION | SHTDN_REASON_MINOR_MAINTENANCE | SHTDN_REASON_FLAG_PLANNED) != FALSE;
+}
+
 // 读取类别表并转成 GBK 字节（去掉 BOM，统一为 \n 换行）
 static bool LoadClassTable(std::vector<BYTE>& table)
 {
@@ -136,6 +164,7 @@ BEGIN_MESSAGE_MAP(CPageTrain, CDialogEx)
 	ON_MESSAGE(WM_USER_RECVLOG, &CPageTrain::OnRecvLog)
 	ON_MESSAGE(WM_USER_PROC_EXIT, &CPageTrain::OnProcExit)
 	ON_WM_HELPINFO()
+	ON_WM_CTLCOLOR()
 END_MESSAGE_MAP()
 
 void CPageTrain::DoDataExchange(CDataExchange* pDX)
@@ -147,6 +176,8 @@ void CPageTrain::DoDataExchange(CDataExchange* pDX)
 BOOL CPageTrain::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
+	CEdit*  p = (CEdit*)GetDlgItem(IDC_EDIT_LOG_TRAIN);
+	p->SetReadOnly(TRUE);
 
 	FillWeightsCombo();
 	FillExportFormats();
@@ -306,7 +337,7 @@ void CPageTrain::Layout()
 	mv(IDC_CHK_RESUME, rightX + 10, M + 168, RIGHTW - 20, 18);
 	mv(IDC_CHK_GPU, rightX + 10, M + 192, RIGHTW - 20, 18);
 
-	;
+	
 
 	mv(IDC_LBL_EXPORT_FMT, rightX + 10, M + 268, RIGHTW - 20, 18);
 	mv(IDC_COMBO_EXPORT_FMT, rightX + 10, M + 292, RIGHTW - 54, 25);
@@ -315,8 +346,13 @@ void CPageTrain::Layout()
 	int btnW = (RIGHTW - 28) / 2;
 	int btnY = M + colH - 8 - 30;
 
+	mv(IDC_CHK_EXIT, rightX + 10, btnY-35, btnW, 28);
+	
 	mv(IDC_BTN_TRAIN_START, rightX + 10, btnY, btnW, 28);
 	mv(IDC_BTN_TRAIN_STOP, rightX + 18 + btnW, btnY, btnW, 28);
+
+	mv(IDC_STATIC_TRAIN_STATUS, 50, btnY+20, btnW, 28);
+	
 }
 
 
@@ -1018,5 +1054,29 @@ LRESULT CPageTrain::OnProcExit(WPARAM wParam, LPARAM lParam)
 	else
 		SetStatus(dwExit == 0 ? _T("训练完成") : _T("训练失败"));
 
+	// 训练正常结束后按勾选状态自动关机（导出、手动停止、训练失败均不触发）
+	if (!bExport && dwExit == 0 && IsDlgButtonChecked(IDC_CHK_EXIT) == BST_CHECKED)
+	{
+		const int nShutdownDelay = 60;
+		AppendLog(_T("==== 训练完成，60 秒后自动关机（如需取消请在命令行执行 shutdown /a）====\r\n"));
+		if (!ShutdownComputer(nShutdownDelay))
+			AppendLog(_T("自动关机失败：当前账户无关机权限或被系统策略阻止。\r\n"));
+	}
+
 	return 0;
+}
+
+
+HBRUSH CPageTrain::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
+{
+	HBRUSH hbr = CDialogEx::OnCtlColor(pDC, pWnd, nCtlColor);
+	if (pWnd->GetDlgCtrlID() == IDC_EDIT_LOG_TRAIN)
+	{
+		pDC->SetTextColor(RGB(255, 255, 255)); 
+		pDC->SetBkMode(TRANSPARENT);      
+		static CBrush brushBlack(RGB(0, 0, 0));
+		return brushBlack;
+	}
+
+	return hbr;
 }

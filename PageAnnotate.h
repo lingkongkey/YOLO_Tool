@@ -125,4 +125,5 @@ private:
 	CStringArray    m_arrAiTodo;               
 public:
 	afx_msg BOOL OnHelpInfo(HELPINFO* pHelpInfo);
+	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
 };
