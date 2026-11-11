@@ -28,7 +28,7 @@ protected:
 	afx_msg void OnBnClickedBtnExport();
 	DECLARE_MESSAGE_MAP()
 
-private:
+public:
 	void FillWeightsCombo();
 	
 	void FillExportFormats();
@@ -50,6 +50,10 @@ private:
 	int  CountTrainImages();
 
 	void RefreshEpochsDefault();
+
+	void GetPtPath();
+	std::vector<YOLOPT>&  m_ptArr;
+	long&                 m_idxl;
 
 	int m_nLastEpochsDefault = 0;
 

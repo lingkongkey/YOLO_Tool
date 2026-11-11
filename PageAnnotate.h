@@ -26,6 +26,9 @@ struct AiAnnotateResult
 	std::vector<AiBoxData> boxes;
 };
 
+
+
+
 class CPageAnnotate : public CDialogEx
 {
 public:
@@ -61,6 +64,8 @@ protected:
 	afx_msg void OnCbnSelchangeComboPageSize();
 	afx_msg void OnLbnSelchangeListImages();
 	afx_msg void OnCbnSelchangeComboClasses();
+	afx_msg void OnMeasureItem(int nIDCtl, LPMEASUREITEMSTRUCT lpMeasureItemStruct);
+	afx_msg void OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct);
 	afx_msg LRESULT OnAnnoChanged(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnRecvLog(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnProcExit(WPARAM wParam, LPARAM lParam);
@@ -82,6 +87,7 @@ protected:
 	void RefreshPage();
 	void GotoPage(int nPage);
 	//
+	void RefreshAnnotatedFlags();
 	void ShowListMenu(int x, int y);
 
 	int  LocalToGlobal(int nLocalIndex) const;
@@ -118,26 +124,31 @@ protected:
 
 	void SetAiRunningUI(bool bRun);
 
+	void GetPtPath();
 
 	CAnnotateCanvas m_canvas;
 	CProcessLogCapture m_capture;
-	CStringArray    m_arrImages;   
+	CStringArray&   m_arrImages;   
 	int             m_nCurImage;
 
-	int             m_nPageSize = 50;        // 每页数量
-	int             m_nCurPage = 0;          // 当前页（0 基）
-	int             m_nTotalImages = 0;      // 图片总数
+	int             m_nPageSize = 50;        // 
+	int             m_nCurPage = 0;          // 
+	int             m_nTotalImages = 0;      // 
 	static const int kPageSizes[4];
 
-	bool            m_bAiRunning = false;      
-	bool            m_bAiStop = false;         
-	bool            m_bAiClassesDirty = false; 
-	int             m_nAiIndex = 0;            
-	int             m_nAiRunId = 0;            
-	CString         m_strAiKey;                
-	CString         m_strAiBase;               
-	CString         m_strAiModel;              
-	CStringArray    m_arrAiTodo;               
+	std::vector<bool> m_bAnnotated;          // 
+
+	bool                  m_bAiRunning = false;      
+	bool                  m_bAiStop = false;         
+	bool                  m_bAiClassesDirty = false; 
+	int                   m_nAiIndex = 0;            
+	int                   m_nAiRunId = 0;            
+	CString               m_strAiKey;                
+	CString               m_strAiBase;               
+	CString               m_strAiModel;              
+	CStringArray          m_arrAiTodo;       
+	std::vector<YOLOPT>&  m_ptArr;
+	long&                 m_idxl;
 public:
 	afx_msg BOOL OnHelpInfo(HELPINFO* pHelpInfo);
 	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);

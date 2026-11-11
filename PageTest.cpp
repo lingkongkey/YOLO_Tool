@@ -76,7 +76,7 @@ namespace
 		return CString(w.c_str());
 	}
 
-	
+
 	void ParseBlobNames(const std::string& text, std::string& strIn, std::string& strOut)
 	{
 		std::istringstream iss(text);
@@ -94,7 +94,7 @@ namespace
 			if (tk.size() < 5)
 				continue;
 
-			
+
 			int nBottom = atoi(tk[2].c_str());
 			int nTop = atoi(tk[3].c_str());
 			if (nBottom < 0 || nTop < 1)
@@ -189,7 +189,7 @@ namespace
 		return names;
 	}
 
-	
+
 	bool FindNcnnPair(const CString& strDir, CString& strParam, CString& strBin)
 	{
 		CString strFound = strDir + _T("\\model.ncnn.param");
@@ -221,7 +221,7 @@ namespace
 		return true;
 	}
 
-	
+
 	bool ResolveNcnnModel(const CString& strSel, CString& strParam, CString& strBin)
 	{
 		if (::PathIsDirectory(strSel))
@@ -258,7 +258,7 @@ namespace
 		if (nDot > 0)
 			strStem = strStem.Left(nDot);
 
-		
+
 		if (FindNcnnPair(strDir + _T("\\") + strStem + _T("_ncnn_model"), strParam, strBin))
 			return true;
 
@@ -305,9 +305,9 @@ namespace
 	void NmsBoxes(std::vector<NcnnBox>& boxes, float fIouThresh)
 	{
 		std::sort(boxes.begin(), boxes.end(), [](const NcnnBox& a, const NcnnBox& b)
-		{
-			return a.fScore > b.fScore;
-		});
+			{
+				return a.fScore > b.fScore;
+			});
 
 		std::vector<NcnnBox> keep;
 		std::vector<bool> bRemoved(boxes.size(), false);
@@ -378,7 +378,7 @@ namespace
 		}
 
 		const int nBoxes = bAttrInW ? nH : nW;
-		
+
 		const bool bDfl = (nc > 0) ? (nAttrs == nc + 64) : (nAttrs >= 100);
 		const int nCls = bDfl ? (nAttrs - 64) : (nAttrs - 4);
 		if (nCls < 1)
@@ -463,7 +463,7 @@ namespace
 				y2 = cy + bh * 0.5f;
 			}
 
-			
+
 			x1 = (x1 - (float)nPadX) / fScale;
 			y1 = (y1 - (float)nPadY) / fScale;
 			x2 = (x2 - (float)nPadX) / fScale;
@@ -508,7 +508,7 @@ namespace
 			return false;
 		}
 
-		
+
 		float fScale = std::min((float)nImgsz / (float)img.cols, (float)nImgsz / (float)img.rows);
 		int w = (int)((float)img.cols * fScale + 0.5f);
 		int h = (int)((float)img.rows * fScale + 0.5f);
@@ -621,7 +621,7 @@ namespace
 		return !img.empty();
 	}
 
-	
+
 	bool CaptureWindowCv(HWND hwnd, cv::Mat& img)
 	{
 		RECT rc = { 0 };
@@ -732,7 +732,7 @@ BOOL CPageTest::OnInitDialog()
 	RestoreModelSelection();
 	m_bInitializing = false;
 
-	
+
 	CString strOutDir = GetProjectOutputDir();
 	if (!strOutDir.IsEmpty())
 	{
@@ -908,7 +908,7 @@ void CPageTest::FillModelCombo()
 		}
 		finder.Close();
 
-		
+
 		CFileFind finderNcnn;
 		BOOL bMoreNcnn = finderNcnn.FindFile(arrDirs[d] + _T("\\*_ncnn_model"));
 		while (bMoreNcnn)
@@ -1365,5 +1365,5 @@ LRESULT CPageTest::OnFinderPicked(WPARAM wParam, LPARAM /*lParam*/)
 
 BOOL CPageTest::OnHelpInfo(HELPINFO* /*pHelpInfo*/)
 {
-	return TRUE;  
+	return TRUE;
 }

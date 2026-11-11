@@ -31,9 +31,9 @@ static const double DIFF_MEAN_THRESHOLD  = 1.5;
 const int CPageCapture::kCapPageSizes[4] = { 50, 100, 200, 500 };
 
 CPageCapture::CPageCapture(CWnd* pParent /*=nullptr*/)
+	: CDialogEx(IDD_PAGE_CAPTURE, pParent)
+	, m_arrCaptures(ProjectImages())
 {
-	CDialogEx(IDD_PAGE_CAPTURE, pParent);
-
 	m_hwndTarget = NULL;
 	m_bAuto      = false;
 	m_nSaved     = 0;
@@ -542,29 +542,9 @@ void CPageCapture::RefreshDirCount()
 	GetDlgItemText(IDC_EDIT_SAVE_DIR, strDir);
 	strDir.Trim();
 
-	int nCount = 0;
-	if (!strDir.IsEmpty() && ::PathIsDirectory(strDir))
-	{
-		const TCHAR* szExts[] = { _T("*.jpg"), _T("*.jpeg"), _T("*.png"), _T("*.bmp") };
-		for (int k = 0; k < 4; k++)
-		{
-			CFileFind finder;
-			BOOL bMore = finder.FindFile(strDir + _T("\\") + szExts[k]);
-			while (bMore)
-			{
-				bMore = finder.FindNextFile();
-				if (!finder.IsDirectory())
-					nCount++;
-			}
-			finder.Close();
-		}
-	}
-
-	if (nCount != m_nDirCount)
-	{
-		m_nDirCount = nCount;
-		UpdateStatus(m_strState);
-	}
+	ReloadProjectImages(strDir);
+	m_nDirCount = GetProjectImageCount();
+	UpdateStatus(m_strState);
 }
 
 CString CPageCapture::GetDefaultSaveDir()
@@ -647,17 +627,17 @@ void CPageCapture::OnBnClickedBtnBrowse()
 	FillCaptureList();
 	UpdateStatus(_T("就绪"));
 
-	CString strMsg;
-	strMsg.Format(
-		_T("项目根目录已设置：%s\r\n\r\n已创建子目录：\r\n")
-		_T("  dataset\\images\\train、val\r\n")
-		_T("  dataset\\labels\\train、val\r\n")
-		_T("  dataset\\data.yaml\r\n")
-		_T("  runs\\detect\\train\r\n")
-		_T("  models\r\n")
-		_T("  output\\ui\r\n\r\n截图保存到：%s"),
-		(LPCTSTR)strRoot, (LPCTSTR)m_strSaveDir);
-	AfxMessageBox(strMsg, MB_ICONINFORMATION);
+	//CString strMsg;
+	//strMsg.Format(
+	//	_T("项目根目录已设置：%s\r\n\r\n已创建子目录：\r\n")
+	//	_T("  dataset\\images\\train、val\r\n")
+	//	_T("  dataset\\labels\\train、val\r\n")
+	//	_T("  dataset\\data.yaml\r\n")
+	//	_T("  runs\\detect\\train\r\n")
+	//	_T("  models\r\n")
+	//	_T("  output\\ui\r\n\r\n截图保存到：%s"),
+	//	(LPCTSTR)strRoot, (LPCTSTR)m_strSaveDir);
+	//AfxMessageBox(strMsg, MB_ICONINFORMATION);
 }
 
 void CPageCapture::OnOK()
@@ -766,23 +746,9 @@ void CPageCapture::FillCaptureList()
 	if (m_nCurCapture >= 0 && m_nCurCapture < m_arrCaptures.GetSize())
 		strKeep = m_arrCaptures[m_nCurCapture];
 
-	CStringArray arrFiles;
-	if (!m_strSaveDir.IsEmpty() && ::PathIsDirectory(m_strSaveDir))
-	{
-		CFileFind finder;
-		BOOL bMore = finder.FindFile(m_strSaveDir + _T("\\*.jpg"));
-		while (bMore)
-		{
-			bMore = finder.FindNextFile();
-			if (!finder.IsDirectory())
-				arrFiles.Add(finder.GetFileName());
-		}
-		finder.Close();
-	}
-
-	m_arrCaptures.RemoveAll();
-	for (INT_PTR i = arrFiles.GetSize() - 1; i >= 0; i--)
-		m_arrCaptures.Add(m_strSaveDir + _T("\\") + arrFiles[i]);
+	
+	EnsureProjectImages(m_strSaveDir);
+	m_nDirCount = GetProjectImageCount();
 
 	int nSel = -1;
 	if (!strKeep.IsEmpty())
@@ -810,7 +776,8 @@ void CPageCapture::FillCaptureList()
 // 新截图直接插到列表头部（最新在前），不重新扫描目录
 void CPageCapture::AddCaptureToFront(const CString& strFile)
 {
-	m_arrCaptures.InsertAt(0, strFile);
+	InsertProjectImageFront(strFile);
+	m_nDirCount = GetProjectImageCount();
 	m_nCurCapture = 0;
 	m_nCurPage = 0;
 
@@ -998,7 +965,7 @@ void CPageCapture::ShowCaptureMenu(int x, int y)
 
 	CMenu menu;
 	menu.CreatePopupMenu();
-	menu.AppendMenu(MF_STRING, 1, _T("删除图片"));
+	menu.AppendMenu(MF_STRING, 1, _T("删除图片（含标签）"));
 	menu.AppendMenu(MF_STRING, 2, _T("打开所在文件夹"));
 
 	int nCmd = menu.TrackPopupMenu(TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN,
@@ -1011,9 +978,14 @@ void CPageCapture::ShowCaptureMenu(int x, int y)
 		::PathStripPath(szName);
 
 		CString strMsg;
-		strMsg.Format(_T("确定删除这张截图吗？\r\n\r\n%s"), szName);
+		strMsg.Format(_T("确定删除这张截图吗？\r\n对应标签也会一并删除。\r\n\r\n%s"), szName);
 		if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) != IDYES)
 			return;
+
+		TCHAR szLabelName[MAX_PATH] = { 0 };
+		_tcsncpy_s(szLabelName, szName, _TRUNCATE);
+		::PathRemoveExtension(szLabelName);
+		CString strLabel = GetDatasetDir() + _T("\\labels\\train\\") + szLabelName + _T(".txt");
 
 		::SetFileAttributes(strFile, FILE_ATTRIBUTE_NORMAL);
 		if (!::DeleteFile(strFile))
@@ -1021,11 +993,18 @@ void CPageCapture::ShowCaptureMenu(int x, int y)
 			AfxMessageBox(_T("删除失败: ") + strFile, MB_ICONWARNING);
 			return;
 		}
-		if (m_nDirCount > 0)
-			m_nDirCount--;      // 删除一张，内存计数 -1，不再扫盘
 
-		// 直接从内存数组移除，不重新扫描目录
-		m_arrCaptures.RemoveAt(nSel);
+		bool bLabelFailed = false;
+		if (::PathFileExists(strLabel))
+		{
+			::SetFileAttributes(strLabel, FILE_ATTRIBUTE_NORMAL);
+			bLabelFailed = (::DeleteFile(strLabel) == FALSE);
+		}
+
+		// 直接从共用内存数组移除，不重新扫描目录
+		RemoveProjectImageAt(nSel);
+		m_nDirCount = GetProjectImageCount();
+
 		int nTotal = (int)m_arrCaptures.GetSize();
 		int nSize = m_nPageSize > 0 ? m_nPageSize : kCapPageSizes[0];
 		int nPages = (nTotal + nSize - 1) / nSize;
@@ -1043,6 +1022,9 @@ void CPageCapture::ShowCaptureMenu(int x, int y)
 		RefreshCapPage();
 		UpdateCapPageInfo();
 		UpdateStatus(m_bAuto ? _T("自动截图中") : _T("就绪"));
+
+		if (bLabelFailed)
+			AfxMessageBox(_T("图片已删除，但对应标签删除失败：\r\n") + strLabel, MB_ICONWARNING);
 	}
 	else if (nCmd == 2)
 	{

@@ -553,3 +553,99 @@ void SetLastTestModel(LPCTSTR lpszPath)
 	cfg.strTestModel = strText;
 	cfg.SaveAll();
 }
+
+namespace
+{
+	CStringArray g_arrProjectImages;   // 项目图片路径，最新的在前
+	CString      g_strProjectImagesDir;
+	bool         g_bProjectImagesLoaded = false;
+	std::vector<YOLOPT> g_arrProjectWeights;
+	long         g_nProjectWeightIndex = 1;
+}
+
+CStringArray& ProjectImages()
+{
+	return g_arrProjectImages;
+}
+
+std::vector<YOLOPT>& ProjectWeights()
+{
+	return g_arrProjectWeights;
+}
+
+long& ProjectWeightIndex()
+{
+	return g_nProjectWeightIndex;
+}
+
+// 只在这里读盘：把目录里的图片路径一次性载入内存
+void ReloadProjectImages(LPCTSTR lpszDir)
+{
+	CString strDir = lpszDir ? lpszDir : _T("");
+	strDir.Trim();
+
+	g_arrProjectImages.RemoveAll();
+	g_strProjectImagesDir = strDir;
+	g_bProjectImagesLoaded = true;
+
+	if (strDir.IsEmpty() || !::PathIsDirectory(strDir))
+		return;
+
+	CStringArray arrFound;
+	const TCHAR* szExts[] = { _T("*.jpg"), _T("*.jpeg"), _T("*.png"), _T("*.bmp") };
+	for (int k = 0; k < 4; k++)
+	{
+		CFileFind finder;
+		BOOL bMore = finder.FindFile(strDir + _T("\\") + szExts[k]);
+		while (bMore)
+		{
+			bMore = finder.FindNextFile();
+			if (!finder.IsDirectory())
+				arrFound.Add(finder.GetFilePath());
+		}
+		finder.Close();
+	}
+
+	// 倒序存放，最新的排在最前面
+	for (INT_PTR i = arrFound.GetSize() - 1; i >= 0; i--)
+		g_arrProjectImages.Add(arrFound[i]);
+}
+
+// 目录没变就直接用内存里的结果，不扫盘
+void EnsureProjectImages(LPCTSTR lpszDir)
+{
+	CString strDir = lpszDir ? lpszDir : _T("");
+	strDir.Trim();
+
+	if (!g_bProjectImagesLoaded || strDir != g_strProjectImagesDir)
+		ReloadProjectImages(strDir);
+}
+
+int GetProjectImageCount()
+{
+	return (int)g_arrProjectImages.GetSize();
+}
+
+void InsertProjectImageFront(LPCTSTR lpszPath)
+{
+	if (lpszPath == NULL || lpszPath[0] == 0)
+		return;
+
+	// 已存在则不重复插入
+	for (INT_PTR i = 0; i < g_arrProjectImages.GetSize(); i++)
+	{
+		if (g_arrProjectImages[i].CompareNoCase(lpszPath) == 0)
+		{
+			g_arrProjectImages.RemoveAt(i);
+			break;
+		}
+	}
+	g_arrProjectImages.InsertAt(0, lpszPath);
+}
+
+void RemoveProjectImageAt(int nIndex)
+{
+	if (nIndex < 0 || nIndex >= g_arrProjectImages.GetSize())
+		return;
+	g_arrProjectImages.RemoveAt(nIndex);
+}

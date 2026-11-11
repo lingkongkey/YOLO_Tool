@@ -10,12 +10,15 @@
 #include "afxdialogex.h"
 #include <shlwapi.h>
 #include <vector>
+#include "PageAnnotate.h"
 
 #include "File/zlib/zlib.h"
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "zlib.lib")
-
-
+extern CPageAnnotate* g_CPagethis;
+CPageTrain* g_CPageTrain = NULL;
+CComboBox* g_pComboXUN = 0;
+extern CComboBox* g_pComboBIAOZHU;
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -148,7 +151,8 @@ static bool LoadClassTable(std::vector<BYTE>& table)
 
 CPageTrain::CPageTrain(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_PAGE_TRAIN, pParent)
-	
+	, m_ptArr(ProjectWeights())
+	, m_idxl(ProjectWeightIndex())
 	, m_bExporting(false)
 {
 }
@@ -175,7 +179,9 @@ void CPageTrain::DoDataExchange(CDataExchange* pDX)
 BOOL CPageTrain::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
-	CEdit*  p = (CEdit*)GetDlgItem(IDC_EDIT_LOG_TRAIN);
+	CEdit* p = (CEdit*)GetDlgItem(IDC_EDIT_LOG_TRAIN);
+	g_pComboXUN = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_TRAIN);
+	g_CPageTrain = this;
 	p->SetReadOnly(TRUE);
 
 	FillWeightsCombo();
@@ -195,7 +201,7 @@ BOOL CPageTrain::OnInitDialog()
 	Layout();
 
 	CEdit* pEditLog = (CEdit*)GetDlgItem(IDC_EDIT_LOG_TRAIN);
-	if (pEditLog == nullptr )
+	if (pEditLog == nullptr)
 	{
 		m_Maxline = 0;
 		return TRUE;
@@ -313,9 +319,9 @@ void CPageTrain::Layout()
 
 	const int M = 8, GAP = 8, RIGHTW = 240, BARH = 22;
 
-	
-	int rightX = W - M - RIGHTW;  
-	int colH = H - M * 2;        
+
+	int rightX = W - M - RIGHTW;
+	int colH = H - M * 2;
 
 	int logW = rightX - GAP - M;
 	if (logW < 200)
@@ -336,7 +342,7 @@ void CPageTrain::Layout()
 	mv(IDC_CHK_RESUME, rightX + 10, M + 168, RIGHTW - 20, 18);
 	mv(IDC_CHK_GPU, rightX + 10, M + 192, RIGHTW - 20, 18);
 
-	
+
 
 	mv(IDC_LBL_EXPORT_FMT, rightX + 10, M + 268, RIGHTW - 20, 18);
 	mv(IDC_COMBO_EXPORT_FMT, rightX + 10, M + 292, RIGHTW - 54, 25);
@@ -345,37 +351,21 @@ void CPageTrain::Layout()
 	int btnW = (RIGHTW - 28) / 2;
 	int btnY = M + colH - 8 - 30;
 
-	mv(IDC_CHK_EXIT, rightX + 10, btnY-35, btnW, 28);
-	
+	mv(IDC_CHK_EXIT, rightX + 10, btnY - 35, btnW, 28);
+
 	mv(IDC_BTN_TRAIN_START, rightX + 10, btnY, btnW, 28);
 	mv(IDC_BTN_TRAIN_STOP, rightX + 18 + btnW, btnY, btnW, 28);
 
-	mv(IDC_STATIC_TRAIN_STATUS, 50, btnY+20, btnW, 28);
-	
+	mv(IDC_STATIC_TRAIN_STATUS, 50, btnY + 20, btnW, 28);
+
 }
 
 
 int CPageTrain::CountTrainImages()
 {
-	CString strDir = GetProjectImagesDir();
-	if (strDir.IsEmpty() || !::PathIsDirectory(strDir))
-		return 0;
-
-	int nCount = 0;
-	const TCHAR* szExts[] = { _T("*.jpg"), _T("*.jpeg"), _T("*.png"), _T("*.bmp") };
-	for (int k = 0; k < 4; k++)
-	{
-		CFileFind finder;
-		BOOL bMore = finder.FindFile(strDir + _T("\\") + szExts[k]);
-		while (bMore)
-		{
-			bMore = finder.FindNextFile();
-			if (!finder.IsDirectory())
-				nCount++;
-		}
-		finder.Close();
-	}
-	return nCount;
+	// 与截图页、标注页共用同一份内存数组，不扫盘
+	EnsureProjectImages(GetProjectImagesDir());
+	return GetProjectImageCount();
 }
 
 
@@ -410,13 +400,88 @@ void CPageTrain::OnShowWindow(BOOL bShow, UINT nStatus)
 	}
 }
 
+
+
+void RefreshWeightCombos()
+{
+	std::vector<YOLOPT>& weights = ProjectWeights();
+	for (size_t i = 0; i < weights.size(); i++)
+		weights[i].ptdex = (long)i;
+
+	CComboBox* combos[] = { g_pComboXUN, g_pComboBIAOZHU };
+	for (int c = 0; c < 2; c++)
+	{
+		CComboBox* pCombo = combos[c];
+		if (pCombo == NULL)
+			continue;
+
+		int nOldSel = pCombo->GetCurSel();
+		CString strOldSel;
+		if (nOldSel >= 0)
+			pCombo->GetLBText(nOldSel, strOldSel);
+
+		pCombo->ResetContent();
+		for (size_t i = 0; i < weights.size(); i++)
+			pCombo->InsertString((int)i, weights[i].pt);
+
+		int nNewSel = pCombo->FindStringExact(-1, strOldSel);
+		if (nNewSel < 0 && pCombo->GetCount() > 0)
+			nNewSel = min(max(nOldSel, 0), pCombo->GetCount() - 1);
+		pCombo->SetCurSel(nNewSel);
+	}
+}
+
+
+void IsTestPt()
+{
+	std::vector<YOLOPT>& weights = ProjectWeights();
+	for (size_t i = weights.size(); i > 0; i--)
+	{
+		if (!filexist(weights[i - 1].ptName))
+			weights.erase(weights.begin() + i - 1);
+	}
+	RefreshWeightCombos();
+}
+
+
+void CPageTrain::GetPtPath()
+{
+	CString strRuns = GetProjectRunsDir();
+	if (!strRuns.IsEmpty())
+	{
+		CFileFind finder;
+		BOOL bMore = finder.FindFile(strRuns + _T("\\*"));
+		while (bMore)
+		{
+			bMore = finder.FindNextFile();
+			if (!finder.IsDirectory() || finder.IsDots())
+				continue;
+
+			CString strPath = strRuns + _T("\\") + finder.GetFileName() + _T("\\weights\\best.pt");
+			CFileFind finderCheck;
+			if (finderCheck.FindFile(strPath) && !IsPt(m_ptArr, strPath))
+			{
+				YOLOPT t_p;
+				t_p.pt.Format(_T("%d--best.pt"), m_idxl);
+				t_p.ptName = strPath;
+				t_p.ptdex = (long)m_ptArr.size();
+				m_idxl++;
+				m_ptArr.push_back(t_p);
+			}
+			finderCheck.Close();
+		}
+		finder.Close();
+	}
+	RefreshWeightCombos();
+}
+
 void CPageTrain::FillWeightsCombo()
 {
 	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_TRAIN);
 	if (pCombo == nullptr)
 		return;
 
-	pCombo->ResetContent(); 
+	pCombo->ResetContent();
 
 	CStringArray arrDirs;
 	{
@@ -427,78 +492,44 @@ void CPageTrain::FillWeightsCombo()
 		if (!strGreen.IsEmpty())
 			arrDirs.Add(strGreen + _T("\\models"));
 	}
-
-
+	long idx = 0;
 	for (INT_PTR d = 0; d < arrDirs.GetSize(); d++)
 	{
 		CFileFind finder;
 		BOOL bMore = finder.FindFile(arrDirs[d] + _T("\\*.pt"));
 		while (bMore)
 		{
+			bMore = finder.FindNextFile();
 			if (!finder.IsDirectory())
 			{
-				CString strName = finder.GetFileName();
-				if (pCombo->FindStringExact(-1, strName) < 0)
+				if (pCombo->FindStringExact(-1, finder.GetFileName()) < 0)
 				{
-					pCombo->AddString(strName);
+					if (IsPt(m_ptArr, arrDirs[d] + "\\" + finder.GetFileName()))
+					{
+						continue;
+					}
+					YOLOPT t_p;
+					t_p.pt = finder.GetFileName();
+					t_p.ptName = arrDirs[d] + "\\" + t_p.pt;
+					t_p.ptdex = idx;
+					pCombo->InsertString(t_p.ptdex, finder.GetFileName());
+					idx += 1;
+					m_ptArr.push_back(t_p);
 				}
 			}
-			bMore = finder.FindNextFile();
 		}
 		finder.Close();
 	}
 
-
-	CString strRuns = GetProjectRunsDir();
-	if (!strRuns.IsEmpty())
-	{
-		CFileFind fRun;
-		BOOL bRun = fRun.FindFile(strRuns + _T("\\*"));
-		while (bRun)
-		{
-			if (!fRun.IsDirectory() || fRun.IsDots())
-			{
-				bRun = fRun.FindNextFile();
-				continue;
-			}
-			CString strWeights = fRun.GetFilePath() + _T("\\weights");
-			if (!::PathIsDirectory(strWeights))
-			{
-				bRun = fRun.FindNextFile();
-				continue;
-			}
-
-			CFileFind fW;
-			BOOL bW = fW.FindFile(strWeights + _T("\\*.pt"));
-			while (bW)
-			{
-				if (!fW.IsDirectory())
-				{
-					CString strRunName = fRun.GetFileName();
-					CString strDisp = strRunName + _T("/") + fW.GetFileName();
-					if (pCombo->FindStringExact(-1, strDisp) < 0)
-					{
-						pCombo->AddString(strDisp);
-					}
-				}
-				bW = fW.FindNextFile();
-			}
-			fW.Close();
-			bRun = fRun.FindNextFile();
-		}
-		fRun.Close();
-	}
-
-
-	if (pCombo->GetCount() == 0)
+	GetPtPath(); //取自己训练后的模型
+	/*if (pCombo->GetCount() == 0)
 	{
 		pCombo->AddString(_T("yolo11n.pt"));
 		pCombo->AddString(_T("yolo11s.pt"));
 		pCombo->AddString(_T("yolov8n.pt"));
 		pCombo->AddString(_T("yolov8s.pt"));
-	}
+	}*/
 
-	
 	int nSel = pCombo->FindStringExact(-1, _T("yolo11n.pt"));
 	pCombo->SetCurSel(nSel >= 0 ? nSel : 0);
 }
@@ -518,7 +549,7 @@ void CPageTrain::FillExportFormats()
 	pCombo->AddString(_T("TFLite"));
 	pCombo->AddString(_T("OpenVINO"));
 	pCombo->AddString(_T("TensorFlow"));
-	
+
 	pCombo->SetCurSel(0);
 }
 
@@ -569,26 +600,11 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 		AppendLog(_T("data.yaml 中的路径参数已修正为当前项目位置\r\n"));
 
 	// Weights: dropdown shows file names (e.g. yolo11n.pt or train-3/best.pt)
-	CString strWeightsPath = strWeights;
-	int nSlash = strWeights.Find(_T('/'));
-	if (nSlash >= 0)
-	{
-		// Training output weight: train-3/best.pt -> <runs>/train-3/weights/best.pt
-		CString strRunName = strWeights.Left(nSlash);
-		CString strFileName = strWeights.Mid(nSlash + 1);
-		strWeightsPath = GetProjectRunsDir() + _T("\\") + strRunName + _T("\\weights\\") + strFileName;
-	}
-	else if (strWeights.Find(_T('\\')) < 0)
-	{
-		CString strProjW = GetProjectModelsDir() + _T("\\") + strWeights;
-		if (::PathFileExists(strProjW))
-			strWeightsPath = strProjW;
-		else
-			strWeightsPath = strGreen + _T("\\models\\") + strWeights;
-	}
+
+	
 
 	bool bResume = (IsDlgButtonChecked(IDC_CHK_RESUME) == BST_CHECKED);
-	
+
 
 	CString strRuns = GetProjectRunsDir();
 	if (strRuns.IsEmpty())
@@ -609,7 +625,7 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 	CString strCmd;
 
 	LPCTSTR pszDevice = bGpu ? _T("0") : _T("cpu");
-	if(bResume)
+	if (bResume)
 	{
 		CString bestPath = GetBestWeightPath();
 		CString lastPath;
@@ -629,6 +645,56 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 	}
 	else
 	{
+		long idx = 0;
+		CString strWeightsPath;
+		for (size_t i = 0; i < m_ptArr.size(); i++)
+		{
+			if (m_ptArr[i].pt == strWeights || m_ptArr[i].ptdex == nSel)
+			{
+				strWeightsPath = m_ptArr[i].ptName;
+				idx = i;
+				break;
+			}
+		}
+
+		if (strWeightsPath.IsEmpty())
+		{
+			AppendLog(_T("未找到pt权重文件"));
+			return;
+		}
+
+		CFileFind finderCheck;
+		BOOL bExist = finderCheck.FindFile(strWeightsPath);
+		if (bExist)
+		{
+			finderCheck.FindNextFile();
+
+			if (!finderCheck.IsDirectory())
+			{
+
+			}
+			else
+			{
+
+				finderCheck.Close();
+				IsTestPt();
+				AppendLog(_T("该pt权重文件已经被删除"));
+				m_idxl--;
+				return;
+			}
+		}
+		else
+		{
+
+			finderCheck.Close();
+			IsTestPt();
+			AppendLog(_T("该pt权重文件已经被删除"));
+			m_idxl--;
+			return;
+
+		}
+		finderCheck.Close();
+
 		strCmd.Format(
 			_T("\"%s\" -X utf8 -u \"%s\" --data \"%s\" --weights \"%s\" --epochs %s --imgsz %s --batch %s --device %s --project \"%s\" --name train"),
 			(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strData, (LPCTSTR)strWeightsPath,
@@ -664,7 +730,7 @@ void CPageTrain::OnBnClickedBtnTrainStop()
 
 	AppendLog(_T("==== 正在停止，请稍等 ====\r\n"));
 	SetStatus(_T("正在停止..."));
-	m_capture.Stop();   
+	m_capture.Stop();
 	SetRunning(false);
 	SetStatus(_T("已停止"));
 }
@@ -679,7 +745,7 @@ CString CPageTrain::GetBestWeightPath()
 	return ::GetBestWeightPath();
 }
 
-	
+
 void CPageTrain::StartExport()
 {
 	if (m_bExporting)
@@ -842,9 +908,9 @@ bool CPageTrain::StartKeyoloPack()
 		return false;
 	}
 
-	std::vector<BYTE> z_file(binRaw.size()+ paramRaw.size());
+	std::vector<BYTE> z_file(binRaw.size() + paramRaw.size());
 	memcpy(z_file.data(), binRaw.data(), binRaw.size());
-	memcpy(z_file.data()+ binRaw.size(), paramRaw.data(), paramRaw.size());
+	memcpy(z_file.data() + binRaw.size(), paramRaw.data(), paramRaw.size());
 
 	std::vector<BYTE> binZip;
 	if (!CompressBytes(z_file, binZip))
@@ -881,16 +947,16 @@ bool CPageTrain::StartKeyoloPack()
 	srand((unsigned)GetTickCount());
 	int nPad = 16 + rand() % 241;
 
-	std::vector<BYTE> SVAE_file(sizeof(ModelPackHeader) + t_ModelPackHeader.binZip_size+ t_ModelPackHeader.table_size+ nPad);
+	std::vector<BYTE> SVAE_file(sizeof(ModelPackHeader) + t_ModelPackHeader.binZip_size + t_ModelPackHeader.table_size + nPad);
 
-	memcpy(SVAE_file.data(),&t_ModelPackHeader, sizeof(ModelPackHeader));
+	memcpy(SVAE_file.data(), &t_ModelPackHeader, sizeof(ModelPackHeader));
 	PModelPackHeader p = (PModelPackHeader)SVAE_file.data();
 	memcpy(&p->data, binZip.data(), t_ModelPackHeader.binZip_size);
-	memcpy(&p->data+ t_ModelPackHeader.binZip_size, clsTable.data(), t_ModelPackHeader.table_size);
+	memcpy(&p->data + t_ModelPackHeader.binZip_size, clsTable.data(), t_ModelPackHeader.table_size);
 
 
 
-	CString strOut = strNcnnDir.Mid(0,pos+1) + _T("ncnn.keyolo");
+	CString strOut = strNcnnDir.Mid(0, pos + 1) + _T("ncnn.keyolo");
 	if (::PathFileExists(strOut))
 		::DeleteFile(strOut);
 
@@ -936,13 +1002,13 @@ void CPageTrain::AppendLog(const CString& strText)
 
 	CStringW line = strText;
 
-	
-	if (m_line >= m_Maxline )
+
+	if (m_line >= m_Maxline)
 	{
 		m_richLog.SetWindowText(L"");
 
 		m_line = 0;
-		return ;
+		return;
 	}
 
 	m_line += 1;
@@ -1071,7 +1137,10 @@ LRESULT CPageTrain::OnProcExit(WPARAM wParam, LPARAM lParam)
 	else
 		SetStatus(dwExit == 0 ? _T("训练完成") : _T("训练失败"));
 
-
+	if (!bExport && dwExit == 0)
+	{
+		g_CPagethis->GetPtPath();
+	}
 	if (!bExport && dwExit == 0 && IsDlgButtonChecked(IDC_CHK_EXIT) == BST_CHECKED)
 	{
 		const int nShutdownDelay = 60;
@@ -1089,8 +1158,8 @@ HBRUSH CPageTrain::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 	HBRUSH hbr = CDialogEx::OnCtlColor(pDC, pWnd, nCtlColor);
 	if (pWnd->GetDlgCtrlID() == IDC_EDIT_LOG_TRAIN)
 	{
-		pDC->SetTextColor(RGB(255, 255, 255)); 
-		pDC->SetBkMode(TRANSPARENT);      
+		pDC->SetTextColor(RGB(255, 255, 255));
+		pDC->SetBkMode(TRANSPARENT);
 		static CBrush brushBlack(RGB(0, 0, 0));
 		return brushBlack;
 	}

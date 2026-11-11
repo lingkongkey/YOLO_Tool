@@ -6,6 +6,17 @@
 #include <sstream>
 #include <corecrt_io.h>
 
+int filexist(CString str)
+{
+	CStringA filestr(str);
+
+	if (_access(filestr, 0) == 0)
+	{
+		return 1;
+	}
+	return 0;
+}
+
 HANDLE g_MyIniPuls_lock_Ha = 0;
 
 int _MyIniPuls::file_exist(const std::string str)

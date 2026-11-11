@@ -14,8 +14,14 @@
 #include <thread>
 #include <memory>
 #pragma comment(lib, "shlwapi.lib")
+#include "PageTrain.h"
 
+
+
+//CString strGreen = GetGreenRoot();
 CPageAnnotate* g_CPagethis=NULL;
+extern CPageTrain* g_CPageTrain;
+CComboBox* g_pComboBIAOZHU = 0;
 
 extern std::vector<char> HttpPost(const std::wstring& wstrUrl, const char* pUtf8Body, DWORD dwBodyLen, const std::wstring& wstrAuthHeader, DWORD& dwCode);
 extern std::string ImageToJpegBase64(LPCTSTR szPath, LONG nMaxLongSide , ULONG nQuality);
@@ -28,7 +34,10 @@ HWND g_apikey = 0, g_apikey1 = 0, g_apikey2 = 0, g_apikey3 = 0;
 
 CPageAnnotate::CPageAnnotate(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_PAGE_ANNOTATE, pParent)
+	, m_arrImages(ProjectImages())
 	, m_nCurImage(-1)
+	, m_ptArr(ProjectWeights())
+	, m_idxl(ProjectWeightIndex())
 {
 }
 
@@ -58,6 +67,8 @@ BEGIN_MESSAGE_MAP(CPageAnnotate, CDialogEx)
 	ON_MESSAGE(WM_USER_PROC_EXIT, &CPageAnnotate::OnProcExit)
 	ON_MESSAGE(WM_USER_AI_RESULT, &CPageAnnotate::OnAiResult)
 
+	ON_WM_MEASUREITEM()
+	ON_WM_DRAWITEM()
 	ON_WM_HELPINFO()
 	ON_WM_CTLCOLOR()
 END_MESSAGE_MAP()
@@ -652,7 +663,7 @@ static const int g_aiPresetCount = (int)(sizeof(g_aiPresets) / sizeof(g_aiPreset
 BOOL CPageAnnotate::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
-
+	g_pComboBIAOZHU = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_ANN);
 	g_CPagethis = this;
 	CEdit* p = (CEdit *) GetDlgItem(IDC_EDIT_AI_KEY);
 	g_apikey = p->m_hWnd;
@@ -1013,25 +1024,11 @@ void CPageAnnotate::FillImageList()
 	if (m_nCurImage >= 0 && m_nCurImage < m_arrImages.GetSize())
 		strKeep = m_arrImages[m_nCurImage];
 
-	m_arrImages.RemoveAll();
-	m_nCurImage = -1;
-
+	// 与截图页共用同一份内存数组，目录没变就不扫盘
 	CString strDir = GetDatasetDir() + _T("\\images\\train");
-	const TCHAR* szExts[] = { _T("*.jpg"), _T("*.jpeg"), _T("*.png"), _T("*.bmp") };
-	for (int k = 0; k < 4; k++)
-	{
-		CFileFind finder;
-		BOOL bMore = finder.FindFile(strDir + _T("\\") + szExts[k]);
-		while (bMore)
-		{
-			bMore = finder.FindNextFile();
-			if (finder.IsDirectory())
-				continue;
-			m_arrImages.Add(finder.GetFilePath());
-		}
-		finder.Close();
-	}
+	EnsureProjectImages(strDir);
 
+	m_nCurImage = -1;
 	m_nTotalImages = m_arrImages.GetSize();
 
 	int nKeepIdx = -1;
@@ -1093,7 +1090,10 @@ void CPageAnnotate::RefreshPage()
 
 	int nTotal = m_arrImages.GetSize();
 	if (nTotal == 0)
+	{
+		RefreshAnnotatedFlags();
 		return;
+	}
 
 	int nPageSize = m_nPageSize > 0 ? m_nPageSize : 50;
 	int nStart = m_nCurPage * nPageSize;
@@ -1119,6 +1119,117 @@ void CPageAnnotate::RefreshPage()
 		pList->SetCurSel(nKeepLocal);
 		pList->SetTopIndex(nKeepLocal);
 	}
+
+	RefreshAnnotatedFlags();
+}
+
+// 计算当前页每张图的标注状态，供列表自绘使用
+void CPageAnnotate::RefreshAnnotatedFlags()
+{
+	int nPageSize = m_nPageSize > 0 ? m_nPageSize : 50;
+	int nTotal = (int)m_arrImages.GetSize();
+	int nStart = m_nCurPage * nPageSize;
+	if (nStart < 0)
+		nStart = 0;
+	int nEnd = nStart + nPageSize;
+	if (nEnd > nTotal)
+		nEnd = nTotal;
+	if (nEnd < nStart)
+		nEnd = nStart;
+
+	m_bAnnotated.assign((size_t)(nEnd - nStart), false);
+	for (int i = nStart; i < nEnd; i++)
+	{
+		// 同名 .txt 存在即视为已标注（空文件表示确认过无目标）
+		m_bAnnotated[(size_t)(i - nStart)] = (::PathFileExists(GetLabelPathFor(m_arrImages[i])) != FALSE);
+	}
+
+	CListBox* pList = (CListBox*)GetDlgItem(IDC_LIST_IMAGES);
+	if (pList != NULL)
+		pList->Invalidate(FALSE);
+}
+
+void CPageAnnotate::OnMeasureItem(int nIDCtl, LPMEASUREITEMSTRUCT lpMeasureItemStruct)
+{
+	if (nIDCtl == IDC_LIST_IMAGES)
+	{
+		lpMeasureItemStruct->itemHeight = 18;
+		return;
+	}
+	CDialogEx::OnMeasureItem(nIDCtl, lpMeasureItemStruct);
+}
+
+void CPageAnnotate::OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct)
+{
+	if (nIDCtl != IDC_LIST_IMAGES)
+	{
+		CDialogEx::OnDrawItem(nIDCtl, lpDrawItemStruct);
+		return;
+	}
+
+	CListBox* pList = (CListBox*)GetDlgItem(IDC_LIST_IMAGES);
+	CDC* pDC = CDC::FromHandle(lpDrawItemStruct->hDC);
+	if (pList == NULL || pDC == NULL)
+		return;
+
+	CRect rc = lpDrawItemStruct->rcItem;
+	const int nItem = (int)lpDrawItemStruct->itemID;
+	const bool bSel = (lpDrawItemStruct->itemState & ODS_SELECTED) != 0;
+
+	pDC->FillSolidRect(&rc, bSel ? ::GetSysColor(COLOR_HIGHLIGHT) : ::GetSysColor(COLOR_WINDOW));
+	if (nItem < 0)
+		return;
+
+	const bool bAnno = (nItem < (int)m_bAnnotated.size()) && m_bAnnotated[(size_t)nItem];
+
+	// 状态图标：已标注 = 绿色实心圆 + 白色对勾，未标注 = 灰色空心圆
+	const int nIcon = 12;
+	const int nX = rc.left + 4;
+	const int nY = rc.top + (rc.Height() - nIcon) / 2;
+
+	if (bAnno)
+	{
+		CBrush br(RGB(46, 160, 86));
+		CPen pen(PS_SOLID, 1, RGB(46, 160, 86));
+		CBrush* pOldBr = pDC->SelectObject(&br);
+		CPen* pOldPen = pDC->SelectObject(&pen);
+		pDC->Ellipse(nX, nY, nX + nIcon, nY + nIcon);
+		pDC->SelectObject(pOldBr);
+		pDC->SelectObject(pOldPen);
+
+		CPen penCheck(PS_SOLID, 2, RGB(255, 255, 255));
+		pOldPen = pDC->SelectObject(&penCheck);
+		CPoint ptCheck[3];
+		ptCheck[0] = CPoint(nX + 3, nY + 6);
+		ptCheck[1] = CPoint(nX + 5, nY + 9);
+		ptCheck[2] = CPoint(nX + 9, nY + 3);
+		pDC->Polyline(ptCheck, 3);
+		pDC->SelectObject(pOldPen);
+	}
+	else
+	{
+		CBrush* pOldBr = (CBrush*)pDC->SelectStockObject(NULL_BRUSH);
+		CPen pen(PS_SOLID, 1, RGB(150, 150, 150));
+		CPen* pOldPen = pDC->SelectObject(&pen);
+		pDC->Ellipse(nX, nY, nX + nIcon, nY + nIcon);
+		pDC->SelectObject(pOldBr);
+		pDC->SelectObject(pOldPen);
+	}
+
+	CString strText;
+	pList->GetText(nItem, strText);
+
+	CRect rcText = rc;
+	rcText.left = nX + nIcon + 6;
+
+	pDC->SetBkMode(TRANSPARENT);
+	pDC->SetTextColor(bSel ? ::GetSysColor(COLOR_HIGHLIGHTTEXT) : ::GetSysColor(COLOR_WINDOWTEXT));
+	CFont* pOldFont = pDC->SelectObject(GetFont());
+	pDC->DrawText(strText, &rcText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+	pDC->SelectObject(pOldFont);
+
+	if (lpDrawItemStruct->itemState & ODS_FOCUS)
+		pDC->DrawFocusRect(&rc);
 }
 
 void CPageAnnotate::GotoPage(int nPage)
@@ -1251,10 +1362,54 @@ void CPageAnnotate::ShowListMenu(int x, int y)
 	else
 		strDelItem = _T("删除图片（含标签）");
 	menu.AppendMenu(MF_STRING, 1, strDelItem);
+	menu.AppendMenu(MF_STRING, 3, _T("只删除标注（保留图片）"));
 	menu.AppendMenu(MF_STRING, 2, _T("打开所在文件夹"));
 
 	int nCmd = menu.TrackPopupMenu(TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN,
 		x, y, this);
+	if (nCmd == 3)
+	{
+		CString strConfirm;
+		strConfirm.Format(_T("确定删除选中的 %d 张图片的标注吗？\r\n图片会保留。"), nCount);
+		if (AfxMessageBox(strConfirm, MB_YESNO | MB_ICONQUESTION) != IDYES)
+			return;
+
+		// 只删除标注，保留图片
+		int nDelLbl = 0, nFail = 0;
+		for (int i = 0; i < nCount; i++)
+		{
+			CString strLabel = GetLabelPathFor(arrSel[i]);
+			if (::PathFileExists(strLabel))
+			{
+				::SetFileAttributes(strLabel, FILE_ATTRIBUTE_NORMAL);
+				if (::DeleteFile(strLabel))
+				{
+					nDelLbl++;
+					AppendLog(_T("已删除标注: ") + strLabel + _T("\r\n"));
+				}
+				else
+				{
+					nFail++;
+					AppendLog(_T("删除标注失败: ") + strLabel + _T("\r\n"));
+				}
+			}
+		}
+
+		// 刷新标注状态
+		RefreshAnnotatedFlags();
+		UpdateAnnoStatus();
+
+		CString strMsg;
+		strMsg.Format(_T("已删除 %d 个标注文件，图片保留。"), nDelLbl);
+		if (nFail > 0)
+		{
+			CString strFail;
+			strFail.Format(_T("\r\n%d 个标注文件删除失败。"), nFail);
+			strMsg += strFail;
+		}
+		AfxMessageBox(strMsg, nFail > 0 ? MB_ICONWARNING : MB_ICONINFORMATION);
+		return;
+	}
 	if (nCmd == 1)
 	{
 
@@ -1428,6 +1583,7 @@ bool CPageAnnotate::SaveCurrentLabels()
 	}
 	AppendLog(_T("已保存标注: ") + strLabel + _T("\r\n"));
 	UpdateAnnoStatus();
+	RefreshAnnotatedFlags();
 	return true;
 }
 
@@ -1598,7 +1754,7 @@ void CPageAnnotate::FillWeightsCombo()
 		if (!strGreen.IsEmpty())
 			arrDirs.Add(strGreen + _T("\\models"));
 	}
-
+	long idx = 0;
 	for (INT_PTR d = 0; d < arrDirs.GetSize(); d++)
 	{
 		CFileFind finder;
@@ -1609,19 +1765,33 @@ void CPageAnnotate::FillWeightsCombo()
 			if (!finder.IsDirectory())
 			{
 				if (pCombo->FindStringExact(-1, finder.GetFileName()) < 0)
-					pCombo->AddString(finder.GetFileName());
+				{
+					if (IsPt(m_ptArr, arrDirs[d] + "\\" + finder.GetFileName()))
+					{
+						continue;
+					}
+
+					YOLOPT t_p;
+					t_p.pt = finder.GetFileName();
+					t_p.ptName = arrDirs[d] + "\\" + t_p.pt;
+					t_p.ptdex = idx;
+					pCombo->InsertString(t_p.ptdex,finder.GetFileName());
+					idx += 1;
+					m_ptArr.push_back(t_p);
+				}
 			}
 		}
 		finder.Close();
 	}
 
-	if (pCombo->GetCount() == 0)
+	GetPtPath(); //取自己训练后的模型
+	/*if (pCombo->GetCount() == 0)
 	{
 		pCombo->AddString(_T("yolo11n.pt"));
 		pCombo->AddString(_T("yolo11s.pt"));
 		pCombo->AddString(_T("yolov8n.pt"));
 		pCombo->AddString(_T("yolov8s.pt"));
-	}
+	}*/
 
 	int nSel = pCombo->FindStringExact(-1, _T("yolo11n.pt"));
 	pCombo->SetCurSel(nSel >= 0 ? nSel : 0);
@@ -1802,16 +1972,57 @@ void CPageAnnotate::OnBnClickedBtnAnnotate()
 	if (strConf.IsEmpty())
 		strConf = _T("0.5");
 
-
-	CString strWeightsPath = strWeights;
-	if (strWeights.Find(_T('\\')) < 0 && strWeights.Find(_T('/')) < 0)
+	long idx = 0;
+	CString strWeightsPath;
+	for (size_t i = 0; i < m_ptArr.size(); i++)
 	{
-		CString strProjW = GetProjectModelsDir() + _T("\\") + strWeights;
-		if (::PathFileExists(strProjW))
-			strWeightsPath = strProjW;
-		else
-			strWeightsPath = strGreen + _T("\\models\\") + strWeights;
+		if (m_ptArr[i].pt == strWeights|| m_ptArr[i].ptdex== nSel)
+		{
+			strWeightsPath = m_ptArr[i].ptName;
+			idx = i;
+			break;
+		}
 	}
+
+	if (strWeightsPath.IsEmpty())
+	{
+		AfxMessageBox(_T("未找到pt权重文件"), MB_ICONWARNING);
+		return;
+	}
+
+	CFileFind finderCheck;
+	BOOL bExist = finderCheck.FindFile(strWeightsPath);
+	if (bExist)
+	{
+		finderCheck.FindNextFile();
+		
+		if (!finderCheck.IsDirectory())
+		{
+			
+		}
+		else
+		{
+
+			finderCheck.Close();
+			IsTestPt();
+			AfxMessageBox(_T("该pt权重文件已经被删除"), MB_ICONWARNING);
+			m_idxl--;
+			return;
+		}
+	}
+	else
+	{
+		
+		finderCheck.Close();
+		IsTestPt();
+		AfxMessageBox(_T("该pt权重文件已经被删除"), MB_ICONWARNING);
+		m_idxl--;
+		return;
+
+	}
+	finderCheck.Close();
+	
+
 
 	CString strImgs = GetProjectImagesDir();
 	if (strImgs.IsEmpty() || !::PathIsDirectory(strImgs))
@@ -2313,6 +2524,61 @@ void CPageAnnotate::SetAiRunningUI(bool bRun)
 	m_canvas.EnableWindow(bRun ? FALSE : TRUE);
 	GetDlgItem(IDC_BTN_AI_ANNOTATE)->EnableWindow(TRUE);
 	SetDlgItemText(IDC_BTN_AI_ANNOTATE, bRun ? _T("停止AI标注") : _T("开始AI标注"));
+}
+
+
+
+
+void CPageAnnotate::GetPtPath()
+{
+	CString strRuns = GetProjectRunsDir();
+	if (strRuns.IsEmpty())
+	{
+		RefreshWeightCombos();
+		return;
+	}
+
+	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_ANN);
+	CString strLatest;
+	
+
+	long idx = pCombo->GetCount();
+	int nMaxNum = 0;
+	{
+		CFileFind finder;
+		BOOL bMore = finder.FindFile(strRuns + _T("\\*"));
+		while (bMore)
+		{
+			bMore = finder.FindNextFile();
+			if (!finder.IsDirectory() || finder.IsDots())
+				continue;
+			CString strName = finder.GetFileName();
+			strName = strRuns + L"\\" + strName + L"\\weights\\best.pt";
+			CFileFind finderCheck;
+			if (finderCheck.FindFile(strName))
+			{
+				if (IsPt(m_ptArr, strName))
+				{
+					continue;
+				}
+				YOLOPT t_p;
+				t_p.pt.Format(L"%d--best.pt", m_idxl);
+				t_p.ptName = strName;
+				t_p.ptdex = (long)m_ptArr.size();
+				pCombo->InsertString(t_p.ptdex, t_p.pt);
+				idx += 1;
+				m_idxl += 1;
+				m_ptArr.push_back(t_p);
+			}
+			finderCheck.Close();
+			
+		}
+		finder.Close();
+	}
+
+
+
+	RefreshWeightCombos();
 }
 
 void CPageAnnotate::OnBnClickedBtnLabelImg()

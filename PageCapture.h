@@ -86,7 +86,7 @@ private:
 	int             m_nDirCount;    
 	CString         m_strState;     
 	CString         m_strSaveDir;   
-	CStringArray    m_arrCaptures;  
+	CStringArray&   m_arrCaptures;  
 
 	int             m_nCurCapture;   
 	int             m_nPageSize;     
