@@ -14,14 +14,14 @@
 #define new DEBUG_NEW
 #endif
 
-// 托盘图标回调消息与右键菜单命令
+
 #define WM_TRAYICON_CALLBACK (WM_USER + 200)
 #define IDM_TRAY_SHOW        40001
 #define IDM_TRAY_EXIT        40002
 #define TRAY_ICON_ID         1
 
 
-// 关闭方式选择对话框（带「不再询问」选项）
+
 class CCloseChoiceDlg : public CDialogEx
 {
 public:
@@ -34,8 +34,8 @@ public:
 
 	enum { IDD = IDD_CLOSE_CHOICE };
 
-	int m_nAction;  // 0=取消，1=最小化到托盘，2=退出程序
-	int m_nNoAsk;   // 是否勾选「不再询问」
+	int m_nAction;  //
+	int m_nNoAsk;   // 
 
 protected:
 	virtual void DoDataExchange(CDataExchange* pDX)
@@ -160,7 +160,6 @@ void CYOLOToolDlg::OnSize(UINT nType, int cx, int cy)
 {
 	CDialogEx::OnSize(nType, cx, cy);
 
-	// 最小化时隐藏到托盘，而不是占用任务栏
 	if (nType == SIZE_MINIMIZED && !m_bExiting)
 	{
 		HideToTray();
@@ -290,7 +289,6 @@ void CYOLOToolDlg::InitTrayIcon()
 	if (m_bTrayAdded)
 		return;
 
-	// 优先使用小图标，托盘显示更清晰
 	m_hTrayIcon = (HICON)::LoadImage(AfxGetInstanceHandle(), MAKEINTRESOURCE(IDR_MAINFRAME),
 		IMAGE_ICON, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0);
 	if (m_hTrayIcon == nullptr)
@@ -326,7 +324,7 @@ void CYOLOToolDlg::HideToTray()
 {
 	InitTrayIcon();
 	if (!m_bTrayAdded)
-		return; // 托盘图标创建失败时保持窗口原状，避免窗口无法找回
+		return; //
 
 	ShowWindow(SW_HIDE);
 }
@@ -343,7 +341,6 @@ int CYOLOToolDlg::AskCloseAction()
 	if (dlg.DoModal() != IDOK || dlg.m_nAction == 0)
 		return 0;
 
-	// 勾选「不再询问」时记住选择，写入 app_config.ini
 	if (dlg.m_nNoAsk == BST_CHECKED)
 	{
 		CAppConfig& cfg = CAppConfig::Instance();
@@ -359,14 +356,13 @@ LRESULT CYOLOToolDlg::OnTrayIcon(WPARAM wParam, LPARAM lParam)
 	if (wParam != TRAY_ICON_ID)
 		return 0;
 
-	// 双击左键托盘图标：还原窗口
+
 	if (lParam == WM_LBUTTONDBLCLK)
 	{
 		RestoreFromTray();
 		return 0;
 	}
 
-	// 右键托盘图标弹出菜单：还原 / 退出
 	if (lParam == WM_RBUTTONUP || lParam == WM_CONTEXTMENU)
 	{
 		CMenu menu;
@@ -392,8 +388,7 @@ LRESULT CYOLOToolDlg::OnTrayIcon(WPARAM wParam, LPARAM lParam)
 		}
 		else if (nCmd == IDM_TRAY_EXIT)
 		{
-			// 不能在这里同步调用 OnClose：托盘回调中同步销毁对话框后模态循环不会退出，
-			// 进程会残留在后台。投递 WM_CLOSE，交由消息循环正常关闭。
+
 			m_bExiting = true;
 			PostMessage(WM_CLOSE);
 		}

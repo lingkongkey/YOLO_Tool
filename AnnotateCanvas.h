@@ -30,12 +30,10 @@ public:
 	void ZoomOut();
 	void FitToWindow();
 	bool Undo();
-	bool CanUndo() const { return !m_arrUndo.empty(); }
 
 	int GetZoomPercent() const;
 	int GetBoxCount() const { return (int)m_arrBoxes.size(); }
 	bool IsModified() const { return m_bModified; }
-	void SetModified(bool bModified) { m_bModified = bModified; }
 	void DeleteSelected();
 
 protected:

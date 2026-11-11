@@ -103,7 +103,7 @@ static bool WriteUtf8File(const CString& strPath, const CString& strText)
 	return true;
 }
 
-// ===== 轻量 JSON 解析与转换（仅用于解析大模型返回，无第三方依赖） =====
+
 namespace
 {
 
@@ -345,7 +345,7 @@ private:
 					m_nPos++;
 					return true;
 				}
-				// 兼容模型输出的非标准数组（如 [177 790 203 839]，数字间缺少逗号）
+			
 				continue;
 			}
 			return false;
@@ -416,7 +416,7 @@ static bool GetJsonNumber(const JsonValue& obj, const wchar_t* lpszKey, double& 
 	return true;
 }
 
-// 从任意文本中提取数字（兼容 "175 785 203 837" 这类非法 JSON 坐标写法）
+
 static void CollectNumbers(const std::wstring& strText, std::vector<double>& nums)
 {
 	size_t i = 0;
@@ -446,7 +446,7 @@ static void CollectNumbers(const std::wstring& strText, std::vector<double>& num
 	}
 }
 
-// 兼容 bbox 为数组、字符串、{x1,y1,x2,y2} 对象等多种输出形式
+
 static bool ExtractBoxNumbers(const JsonValue& v, double vals[4])
 {
 	std::vector<double> nums;
@@ -479,7 +479,6 @@ static bool ExtractBoxNumbers(const JsonValue& v, double vals[4])
 	return true;
 }
 
-// 从 chat/completions 响应中取出 message.content 文本
 static bool ExtractAiContent(const std::wstring& strResponse, std::wstring& strContent, std::wstring& strError)
 {
 	JsonValue root;
@@ -531,7 +530,7 @@ static bool ExtractAiContent(const std::wstring& strResponse, std::wstring& strC
 	return true;
 }
 
-// 解析模型输出的框，坐标可为像素（相对上传图）或 0~1 归一化，统一转为 YOLO 归一化
+
 static bool ParseAiBoxes(const std::wstring& strContent, LONG nWidth, LONG nHeight,
 	std::vector<AiBoxData>& boxes, std::wstring& strError)
 {
@@ -571,7 +570,7 @@ static bool ParseAiBoxes(const std::wstring& strContent, LONG nWidth, LONG nHeig
 			strName.erase(strName.begin());
 		while (!strName.empty() && (strName[strName.size() - 1] == L' ' || strName[strName.size() - 1] == L'\t'))
 			strName.erase(strName.size() - 1);
-		// 模型偶尔会漏写类别，沿用上一个框的类别名
+
 		if (strName.empty())
 			strName = strLastClass;
 		if (strName.empty())
@@ -602,7 +601,6 @@ static bool ParseAiBoxes(const std::wstring& strContent, LONG nWidth, LONG nHeig
 		if (!bGotBox)
 			continue;
 
-		// 绝对值明显大于 1 视为像素坐标，反之以归一化坐标处理
 		bool bPixel = fabs(x1) > 1.5 || fabs(y1) > 1.5 || fabs(x2) > 1.5 || fabs(y2) > 1.5;
 		if (bPixel)
 		{
@@ -671,7 +669,7 @@ BOOL CPageAnnotate::OnInitDialog()
 		for (int i = 0; i < g_aiPresetCount; i++)
 			pProvider->AddString(g_aiPresets[i].szName);
 
-		// 默认服务商锚定为豆包：按名称查找而非硬编码下标，防止调整预设顺序后默认值跑偏
+	
 		int nSel = 0;
 		for (int i = 0; i < g_aiPresetCount; i++)
 		{
@@ -799,7 +797,6 @@ BOOL CPageAnnotate::PreTranslateMessage(MSG* pMsg)
 				}
 				else
 				{
-					int nMax = min(9, (int)pCombo->GetCount() - 1);
 					CString strTip;
 					SetStatus(strTip);
 				}
@@ -808,17 +805,6 @@ BOOL CPageAnnotate::PreTranslateMessage(MSG* pMsg)
 		}
 
 	}
-	
-
-	
-
-
-
-
-
-	
-
-	
 
 	if (pMsg->message == WM_KEYDOWN && pMsg->wParam == _T('A') &&
 		(::GetKeyState(VK_CONTROL) & 0x8000) != 0 &&
@@ -1762,14 +1748,12 @@ void CPageAnnotate::StartAiAnnotateImage()
 	}
 
 	HWND hWnd = GetSafeHwnd();
-	int nIndex = m_nAiIndex;
 	int nRunId = m_nAiRunId;
 
 
-	std::thread([hWnd, nIndex, nRunId, strImgPath, strKey, strUrl, strModel, strClassesHint]()
+	std::thread([hWnd, nRunId, strImgPath, strKey, strUrl, strModel, strClassesHint]()
 	{
 		AiAnnotateResult* pRes = new AiAnnotateResult();
-		pRes->nIndex = nIndex;
 		pRes->strImage = strImgPath;
 
 		LONG nWidth = 0, nHeight = 0;
@@ -1808,15 +1792,14 @@ void CPageAnnotate::StartAiAnnotateImage()
 				strBody += L"{\"model\":\"";
 				strBody += JsonEscape(strModel);
 				strBody += L"\",\"temperature\":0.1,\"max_tokens\":";
-				// DeepSeek 默认推理量较大，给足输出上限；智谱限制最大 1024
+			
 				if (strUrl.find(L"api.deepseek.com") != std::wstring::npos)
 					strBody += L"8192";
 				else if (strUrl.find(L"open.bigmodel.cn") != std::wstring::npos)
 					strBody += L"1024";
 				else
 					strBody += L"4096";
-				// DeepSeek 默认开启思考模式，标注任务关掉以大幅减少推理 token；
-				// 豆包参数与千问对齐，不发 thinking 参数；GLM 亦不发（其 thinking 系列模型不支持关闭，报 1210）
+			
 				if (strUrl.find(L"api.deepseek.com") != std::wstring::npos)
 					strBody += L",\"thinking\":{\"type\":\"disabled\"}";
 				strBody += L",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"";
@@ -1824,7 +1807,7 @@ void CPageAnnotate::StartAiAnnotateImage()
 				strBody += L"\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64,";
 				strBody.append(strBase64.begin(), strBase64.end());
 				strBody += L"\"";
-				// 豆包/千问支持低精度图片，可大幅降低图片 token；DeepSeek 在低精度下完全检不出目标，保持原始精度
+				
 				if (strUrl.find(L"volces.com") != std::wstring::npos ||
 					strUrl.find(L"dashscope.aliyuncs.com") != std::wstring::npos)
 					strBody += L",\"detail\":\"low\"";
@@ -1887,7 +1870,6 @@ LRESULT CPageAnnotate::OnAiResult(WPARAM wParam, LPARAM lParam)
 	if (pResult == NULL)
 		return 0;
 
-	// 已停止或已开始新一轮任务，丢弃过期结果
 	if (!m_bAiRunning || (int)wParam != m_nAiRunId)
 		return 0;
 
@@ -1925,7 +1907,6 @@ void CPageAnnotate::HandleAiResult(AiAnnotateResult* pResult)
 			const AiBoxData& b = pResult->boxes[i];
 			CString strName(b.strName.c_str());
 
-			// 只保留类别表中已有的类别，模型自行编造的类别一律丢弃
 			if (bRestrict && !IsAiClassAllowed(arrKnown, strName))
 			{
 				nSkipped++;
@@ -1943,7 +1924,6 @@ void CPageAnnotate::HandleAiResult(AiAnnotateResult* pResult)
 				continue;
 			}
 
-			// 同位置去重：与已保留框 IoU >= 0.7 视为同一目标，只保留第一个
 			double x1 = b.cx - b.w * 0.5, y1 = b.cy - b.h * 0.5;
 			double x2 = b.cx + b.w * 0.5, y2 = b.cy + b.h * 0.5;
 			bool bDup = false;
@@ -1978,8 +1958,6 @@ void CPageAnnotate::HandleAiResult(AiAnnotateResult* pResult)
 			nWritten++;
 		}
 
-		// 只有标注成功才写标签：零框且无过滤说明模型确认无目标；全部被过滤则不写，保留重试。
-		// GLM 例外：其空结果多为漏检而非确认无目标，禁止写空标签，保留下次重试/换家标注的机会
 		bool bGlm = m_strAiBase.Find(_T("bigmodel.cn")) >= 0;
 		bool bWriteLabel = (nWritten > 0) || (nSkipped == 0 && !bGlm);
 		CString strLabel = GetLabelPathFor(strImg);

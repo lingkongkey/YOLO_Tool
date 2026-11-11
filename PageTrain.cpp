@@ -55,7 +55,7 @@ static void WriteU32(BYTE* p, unsigned int v)
 		p[i] = (BYTE)(v >> (8 * i));
 }
 
-// 训练完成后的自动关机：启用关机特权并延时关机，用户可在命令行执行 shutdown /a 取消
+
 static bool ShutdownComputer(int nDelaySeconds)
 {
 	HANDLE hToken = NULL;
@@ -83,7 +83,7 @@ static bool ShutdownComputer(int nDelaySeconds)
 		SHTDN_REASON_MAJOR_APPLICATION | SHTDN_REASON_MINOR_MAINTENANCE | SHTDN_REASON_FLAG_PLANNED) != FALSE;
 }
 
-// 读取类别表并转成 GBK 字节（去掉 BOM，统一为 \n 换行）
+
 static bool LoadClassTable(std::vector<BYTE>& table)
 {
 	table.clear();
@@ -111,7 +111,6 @@ static bool LoadClassTable(std::vector<BYTE>& table)
 	if (nBegin >= raw.size())
 		return false;
 
-	// UTF-8 转 GBK(CP_ACP)：classes.txt 为 UTF-8 时转换；本身已是 ANSI 时转换失败则直接用原字节
 	std::vector<BYTE> ansi;
 	{
 		LPCSTR psz = (LPCSTR)&raw[nBegin];
@@ -407,7 +406,6 @@ void CPageTrain::OnShowWindow(BOOL bShow, UINT nStatus)
 	if (bShow)
 	{
 		RefreshEpochsDefault();
-		// 项目目录可能被复制到别处，打开训练页时静默修正 data.yaml 中的路径
 		RepairDataYamlPaths();
 	}
 }
@@ -567,7 +565,6 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 		return;
 	}
 
-	// 项目目录被复制到别处后，data.yaml 中的绝对路径会失效，训练前自动修正
 	if (RepairDataYamlPaths())
 		AppendLog(_T("data.yaml 中的路径参数已修正为当前项目位置\r\n"));
 
@@ -591,7 +588,7 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 	}
 
 	bool bResume = (IsDlgButtonChecked(IDC_CHK_RESUME) == BST_CHECKED);
-	bool bIsLastPt = (strWeights.Find(_T("last.pt")) >= 0);
+	
 
 	CString strRuns = GetProjectRunsDir();
 	if (strRuns.IsEmpty())
@@ -612,14 +609,34 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 	CString strCmd;
 
 	LPCTSTR pszDevice = bGpu ? _T("0") : _T("cpu");
-	strCmd.Format(
-		_T("\"%s\" -X utf8 -u \"%s\" --data \"%s\" --weights \"%s\" --epochs %s --imgsz %s --batch %s --device %s --project \"%s\" --name train"),
-		(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strData, (LPCTSTR)strWeightsPath,
-		(LPCTSTR)strEpochs, (LPCTSTR)strImgsz, (LPCTSTR)strBatch, pszDevice, (LPCTSTR)strRuns);
+	if(bResume)
+	{
+		CString bestPath = GetBestWeightPath();
+		CString lastPath;
+		int nPos = bestPath.ReverseFind(_T('\\'));
+		if (nPos != -1)
+		{
+			lastPath = bestPath.Left(nPos + 1) + _T("last.pt");
+		}
+		else
+		{
+			return;
+		}
+
+		strCmd.Format(
+			_T("\"%s\" -X utf8 -u \"%s\" --weights \"%s\" --resume True"),
+			(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)lastPath);
+	}
+	else
+	{
+		strCmd.Format(
+			_T("\"%s\" -X utf8 -u \"%s\" --data \"%s\" --weights \"%s\" --epochs %s --imgsz %s --batch %s --device %s --project \"%s\" --name train"),
+			(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strData, (LPCTSTR)strWeightsPath,
+			(LPCTSTR)strEpochs, (LPCTSTR)strImgsz, (LPCTSTR)strBatch, pszDevice, (LPCTSTR)strRuns);
+	}
 
 
-	if (bResume && bIsLastPt)
-		strCmd += _T(" --resume");
+
 
 	CString strLog;
 	LPCTSTR pszDevName = bGpu ? _T("GPU") : _T("CPU");
@@ -1054,7 +1071,7 @@ LRESULT CPageTrain::OnProcExit(WPARAM wParam, LPARAM lParam)
 	else
 		SetStatus(dwExit == 0 ? _T("训练完成") : _T("训练失败"));
 
-	// 训练正常结束后按勾选状态自动关机（导出、手动停止、训练失败均不触发）
+
 	if (!bExport && dwExit == 0 && IsDlgButtonChecked(IDC_CHK_EXIT) == BST_CHECKED)
 	{
 		const int nShutdownDelay = 60;

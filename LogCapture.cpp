@@ -57,7 +57,6 @@ namespace
 	}
 }
 
-// 去掉 VT100 ANSI 转义序列（如 ESC[32m），否则 MFC Edit 控件会显示成方块乱码
 static void StripAnsi(CStringW& s)
 {
 	CStringW out;
@@ -83,7 +82,7 @@ void CProcessLogCapture::FeedBytes(
 	std::vector<BYTE>& lineBuf,
 	HWND hWnd, BOOL bErr)
 {
-	// 结束当前行：UTF-8 转码 -> 去 ANSI 转义 -> 投递到 UI 线程
+
 	auto FlushLine = [&]()
 	{
 		if (lineBuf.empty())
@@ -108,7 +107,7 @@ void CProcessLogCapture::FeedBytes(
 	for (DWORD i = 0; i < len; ++i)
 	{
 		BYTE b = data[i];
-		// \n 与 \r 都视为行结束：tqdm 进度条用 \r 原地刷新，按行投递才能实时看到进度
+		
 		if (b == '\n' || b == '\r')
 			FlushLine();
 		else
@@ -154,7 +153,6 @@ DWORD WINAPI CProcessLogCapture::WaitExitThreadProc(LPVOID lpParam)
 		return 0;
 
 	WaitForSingleObject(pWait->hProcess, INFINITE);
-	// 退出码一起抛给 UI 线程：0 成功，非 0 失败
 	DWORD dwExitCode = 0;
 	::GetExitCodeProcess(pWait->hProcess, &dwExitCode);
 	::PostMessage(pWait->hNotifyWnd, WM_USER_PROC_EXIT, (WPARAM)dwExitCode, 0);
@@ -249,21 +247,18 @@ BOOL CProcessLogCapture::StartProcess(LPCTSTR szCmdLine, HWND hNotifyWnd)
 
 	m_bRunning = TRUE;
 
-	// stdout 读线程
 	LogCaptureParam* pOut = new LogCaptureParam;
 	pOut->hNotifyWnd = hNotifyWnd;
 	pOut->hPipeRead = m_hOutRead;
 	pOut->bIsStdErr = FALSE;
 	m_hThreadOut = CreateThread(nullptr, 0, ReadPipeThreadProc, pOut, 0, nullptr);
 
-	// stderr 读线程
 	LogCaptureParam* pErr = new LogCaptureParam;
 	pErr->hNotifyWnd = hNotifyWnd;
 	pErr->hPipeRead = m_hErrRead;
 	pErr->bIsStdErr = TRUE;
 	m_hThreadErr = CreateThread(nullptr, 0, ReadPipeThreadProc, pErr, 0, nullptr);
 
-	// 等待进程退出线程【修复点】
 	WaitParam* pWaitParam = new WaitParam;
 	pWaitParam->hProcess = nullptr;
 	pWaitParam->hNotifyWnd = hNotifyWnd;
@@ -280,8 +275,6 @@ BOOL CProcessLogCapture::StartProcess(LPCTSTR szCmdLine, HWND hNotifyWnd)
 
 void CProcessLogCapture::Stop()
 {
-	// 进程还在运行：必须先结束，否则读取线程卡在 ReadFile、等待线程卡在
-	// WaitForSingleObject，本函数会永久阻塞
 	_try{
 	if (m_hProcess)
 	{

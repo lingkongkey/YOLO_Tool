@@ -19,221 +19,678 @@
 #define new DEBUG_NEW
 #endif
 
-//namespace
-//{
-//	// 测试用 NCNN 模型（param 与 bin 同目录同名）
-//	const char* k_ncnnBinPath =
-//		"E:\\dire\\c++\\YOLO\\maoxian2\\runs\\detect\\train\\weights\\best_ncnn_model\\model.ncnn.bin";
-//	const char* k_ncnnParamPath = //model.ncnn.param
-//		"E:\\dire\\c++\\YOLO\\maoxian2\\runs\\detect\\train\\weights\\best_ncnn_model\\model.ncnn.param";
-//
-//	struct NcnnDetection
-//	{
-//		int   nClass;
-//		float fConf;
-//		float x, y, w, h;
-//	};
-//
-//	float NcnnBoxIoU(const NcnnDetection& a, const NcnnDetection& b)
-//	{
-//		float ax2 = a.x + a.w, ay2 = a.y + a.h;
-//		float bx2 = b.x + b.w, by2 = b.y + b.h;
-//		float ix1 = a.x > b.x ? a.x : b.x;
-//		float iy1 = a.y > b.y ? a.y : b.y;
-//		float ix2 = ax2 < bx2 ? ax2 : bx2;
-//		float iy2 = ay2 < by2 ? ay2 : by2;
-//		float iw = ix2 - ix1, ih = iy2 - iy1;
-//		if (iw <= 0.0f || ih <= 0.0f)
-//			return 0.0f;
-//		float fInter = iw * ih;
-//		float fUnion = a.w * a.h + b.w * b.h - fInter;
-//		return fUnion > 0.0f ? fInter / fUnion : 0.0f;
-//	}
-//
-//	void NcnnNms(std::vector<NcnnDetection>& vec, float fIoUThresh)
-//	{
-//		if (vec.empty())
-//			return;
-//
-//		std::sort(vec.begin(), vec.end(), [](const NcnnDetection& a, const NcnnDetection& b)
-//		{
-//			return a.fConf > b.fConf;
-//		});
-//
-//		std::vector<NcnnDetection> keep;
-//		std::vector<bool> bRemoved(vec.size(), false);
-//		for (size_t i = 0; i < vec.size(); i++)
-//		{
-//			if (bRemoved[i])
-//				continue;
-//			keep.push_back(vec[i]);
-//			for (size_t j = i + 1; j < vec.size(); j++)
-//			{
-//				if (bRemoved[j])
-//					continue;
-//				if (vec[j].nClass != vec[i].nClass)
-//					continue;
-//				if (NcnnBoxIoU(vec[i], vec[j]) > fIoUThresh)
-//					bRemoved[j] = true;
-//			}
-//		}
-//		vec.swap(keep);
-//	}
-//
-//	CString WstrFromUtf8(const std::string& s)
-//	{
-//		if (s.empty())
-//			return CString();
-//		int n = ::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), NULL, 0);
-//		if (n <= 0)
-//			return CString();
-//		std::wstring w((size_t)n, L'\0');
-//		::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), &w[0], n);
-//		return CString(w.c_str());
-//	}
-//
-//	bool ReadTextFileNarrow(const std::string& strPath, std::string& text)
-//	{
-//		std::ifstream f(strPath.c_str(), std::ios::binary);
-//		if (!f.is_open())
-//			return false;
-//		text.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
-//		return true;
-//	}
-//
-//	// 解析 param 文本，取输入 blob 和最后一层的输出 blob
-//	void ParseNcnnBlobNames(const std::string& paramText, std::string& strIn, std::string& strOut)
-//	{
-//		std::istringstream iss(paramText);
-//		std::string line;
-//		while (std::getline(iss, line))
-//		{
-//			if (!line.empty() && line.back() == '\r')
-//				line.pop_back();
-//			if (line.empty())
-//				continue;
-//
-//			std::istringstream ls(line);
-//			std::vector<std::string> tk;
-//			std::string t;
-//			while (ls >> t)
-//				tk.push_back(t);
-//			if (tk.size() < 5)
-//				continue;
-//
-//			// 层格式: 类型 名称 输入数 输出数 输入blob... 输出blob... 参数...
-//			int nBottom = atoi(tk[2].c_str());
-//			int nTop = atoi(tk[3].c_str());
-//			if (nTop < 1)
-//				continue;
-//			int nTopIdx = 4 + nBottom + nTop - 1;
-//			if (nBottom < 0 || nTopIdx >= (int)tk.size())
-//				continue;
-//			std::string strTopBlob = tk[nTopIdx];
-//
-//			if (tk[0] == "Input")
-//				strIn = strTopBlob;
-//			strOut = strTopBlob;
-//		}
-//	}
-//
-//	// 解析 metadata.yaml 的 names 段（0: 名称）
-//	void ParseNcnnNames(const std::string& metaText, std::vector<std::string>& names)
-//	{
-//		std::istringstream iss(metaText);
-//		std::string line;
-//		bool bInNames = false;
-//		while (std::getline(iss, line))
-//		{
-//			if (!line.empty() && line.back() == '\r')
-//				line.pop_back();
-//			if (!bInNames)
-//			{
-//				if (line.compare(0, 6, "names:") == 0)
-//					bInNames = true;
-//				continue;
-//			}
-//			if (line.empty())
-//				continue;
-//			if (line[0] != ' ' && line[0] != '\t')
-//				break;
-//
-//			size_t nColon = line.find(':');
-//			if (nColon == std::string::npos)
-//				continue;
-//			int nIdx = atoi(line.substr(0, nColon).c_str());
-//			std::string strName = line.substr(nColon + 1);
-//			while (!strName.empty() && (strName.front() == ' ' || strName.front() == '\t'))
-//				strName.erase(strName.begin());
-//			while (!strName.empty() && (strName.back() == ' ' || strName.back() == '\t'))
-//				strName.pop_back();
-//			if (nIdx < 0)
-//				continue;
-//			if ((int)names.size() <= nIdx)
-//				names.resize((size_t)nIdx + 1);
-//			names[(size_t)nIdx] = strName;
-//		}
-//	}
-//
-//	// BGRA(top-down) 等比缩放后居中填充到 nSize×nSize，输出 RGB 连续缓冲
-//	void BuildLetterboxRgb(const BYTE* pBgra, int W, int H, int nStride, int nSize,
-//		std::vector<unsigned char>& rgb, float& fScale, int& nPadX, int& nPadY)
-//	{
-//		rgb.assign((size_t)nSize * nSize * 3, 114);
-//
-//		fScale = (std::min)((float)nSize / (float)W, (float)nSize / (float)H);
-//		int nNewW = (int)((float)W * fScale + 0.5f);
-//		int nNewH = (int)((float)H * fScale + 0.5f);
-//		if (nNewW < 1) nNewW = 1;
-//		if (nNewH < 1) nNewH = 1;
-//		if (nNewW > nSize) nNewW = nSize;
-//		if (nNewH > nSize) nNewH = nSize;
-//		nPadX = (nSize - nNewW) / 2;
-//		nPadY = (nSize - nNewH) / 2;
-//
-//		int nSrcOff[3] = { 2, 1, 0 }; // BGR → RGB
-//
-//		for (int dy = 0; dy < nNewH; dy++)
-//		{
-//			float fy = ((float)dy + 0.5f) / fScale - 0.5f;
-//			if (fy < 0.0f) fy = 0.0f;
-//			int y0 = (int)fy;
-//			if (y0 > H - 1) y0 = H - 1;
-//			int y1 = (y0 + 1 < H) ? (y0 + 1) : (H - 1);
-//			float wy = fy - (float)y0;
-//
-//			const BYTE* pRow0 = pBgra + (size_t)y0 * nStride;
-//			const BYTE* pRow1 = pBgra + (size_t)y1 * nStride;
-//			unsigned char* pDst = &rgb[((size_t)(nPadY + dy) * nSize + (size_t)nPadX) * 3];
-//
-//			for (int dx = 0; dx < nNewW; dx++)
-//			{
-//				float fx = ((float)dx + 0.5f) / fScale - 0.5f;
-//				if (fx < 0.0f) fx = 0.0f;
-//				int x0 = (int)fx;
-//				if (x0 > W - 1) x0 = W - 1;
-//				int x1 = (x0 + 1 < W) ? (x0 + 1) : (W - 1);
-//				float wx = fx - (float)x0;
-//
-//				const BYTE* p00 = pRow0 + (size_t)x0 * 4;
-//				const BYTE* p01 = pRow0 + (size_t)x1 * 4;
-//				const BYTE* p10 = pRow1 + (size_t)x0 * 4;
-//				const BYTE* p11 = pRow1 + (size_t)x1 * 4;
-//
-//				for (int k = 0; k < 3; k++)
-//				{
-//					int off = nSrcOff[k];
-//					float v = (1.0f - wy) * ((1.0f - wx) * p00[off] + wx * p01[off])
-//						+ wy * ((1.0f - wx) * p10[off] + wx * p11[off]);
-//					int iv = (int)(v + 0.5f);
-//					if (iv < 0) iv = 0;
-//					if (iv > 255) iv = 255;
-//					pDst[dx * 3 + k] = (unsigned char)iv;
-//				}
-//			}
-//		}
-//	}
-//}
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
+#include "net.h"
+#include <opencv2/opencv.hpp>
+
+#include <algorithm>
+#include <cfloat>
+#include <cmath>
+#include <cstring>
+#include <sstream>
+#include <string>
+#include <vector>
+
+namespace
+{
+	const UINT kPwRenderFullContent = 0x00000002;
+
+	struct NcnnBox
+	{
+		int   nClass;
+		float fScore;
+		float x, y, w, h;
+	};
+
+	bool ReadFileBytes(const CString& strPath, std::string& data)
+	{
+		FILE* fp = NULL;
+		if (_wfopen_s(&fp, (LPCTSTR)strPath, L"rb") != 0 || fp == NULL)
+			return false;
+
+		char buf[8192];
+		size_t n = 0;
+		while ((n = fread(buf, 1, sizeof(buf), fp)) > 0)
+			data.append(buf, n);
+		fclose(fp);
+		return true;
+	}
+
+	CString Utf8ToText(const std::string& s)
+	{
+		if (s.empty())
+			return CString();
+
+		int n = ::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), NULL, 0);
+		if (n <= 0)
+			return CString();
+
+		std::wstring w((size_t)n, L'\0');
+		::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), &w[0], n);
+		return CString(w.c_str());
+	}
+
+	
+	void ParseBlobNames(const std::string& text, std::string& strIn, std::string& strOut)
+	{
+		std::istringstream iss(text);
+		std::string line;
+		while (std::getline(iss, line))
+		{
+			if (!line.empty() && line.back() == '\r')
+				line.pop_back();
+
+			std::istringstream ls(line);
+			std::vector<std::string> tk;
+			std::string t;
+			while (ls >> t)
+				tk.push_back(t);
+			if (tk.size() < 5)
+				continue;
+
+			
+			int nBottom = atoi(tk[2].c_str());
+			int nTop = atoi(tk[3].c_str());
+			if (nBottom < 0 || nTop < 1)
+				continue;
+			int nTopIdx = 4 + nBottom + nTop - 1;
+			if (nTopIdx >= (int)tk.size())
+				continue;
+
+			if (tk[0] == "Input")
+				strIn = tk[4 + nBottom];
+			strOut = tk[nTopIdx];
+		}
+	}
+
+
+	void ParseMetadataNames(const std::string& text, std::vector<std::string>& names)
+	{
+		std::istringstream iss(text);
+		std::string line;
+		bool bInNames = false;
+		while (std::getline(iss, line))
+		{
+			if (!line.empty() && line.back() == '\r')
+				line.pop_back();
+			if (!bInNames)
+			{
+				if (line.compare(0, 6, "names:") == 0)
+					bInNames = true;
+				continue;
+			}
+			if (line.empty())
+				continue;
+			if (line[0] != ' ' && line[0] != '\t')
+				break;
+
+			size_t nColon = line.find(':');
+			if (nColon == std::string::npos)
+				continue;
+
+			int nIdx = atoi(line.substr(0, nColon).c_str());
+			std::string strName = line.substr(nColon + 1);
+			size_t nFirst = strName.find_first_not_of(" \t");
+			size_t nLast = strName.find_last_not_of(" \t");
+			strName = (nFirst == std::string::npos)
+				? std::string()
+				: strName.substr(nFirst, nLast - nFirst + 1);
+
+			if (nIdx < 0)
+				continue;
+			if ((int)names.size() <= nIdx)
+				names.resize((size_t)nIdx + 1);
+			names[(size_t)nIdx] = strName;
+		}
+	}
+
+
+	std::vector<std::string> LoadClassNames(const CString& strParamPath)
+	{
+		std::vector<std::string> names;
+		CString strDir = strParamPath.Left(strParamPath.ReverseFind(_T('\\')));
+
+		std::string meta;
+		if (ReadFileBytes(strDir + _T("\\metadata.yaml"), meta))
+		{
+			ParseMetadataNames(meta, names);
+			if (!names.empty())
+				return names;
+		}
+
+		CString strClasses = GetProjectDatasetDir();
+		if (!strClasses.IsEmpty())
+			strClasses += _T("\\classes.txt");
+		if (!::PathFileExists(strClasses))
+		{
+			CString strGreen = GetGreenRoot();
+			strClasses = strGreen.IsEmpty() ? CString() : strGreen + _T("\\config\\classes.txt");
+		}
+
+		std::string text;
+		if (!strClasses.IsEmpty() && ReadFileBytes(strClasses, text))
+		{
+			std::istringstream iss(text);
+			std::string line;
+			while (std::getline(iss, line))
+			{
+				if (!line.empty() && line.back() == '\r')
+					line.pop_back();
+				if (!line.empty())
+					names.push_back(line);
+			}
+		}
+		return names;
+	}
+
+	
+	bool FindNcnnPair(const CString& strDir, CString& strParam, CString& strBin)
+	{
+		CString strFound = strDir + _T("\\model.ncnn.param");
+		if (!::PathFileExists(strFound))
+		{
+			strFound.Empty();
+			CFileFind finder;
+			BOOL bMore = finder.FindFile(strDir + _T("\\*.param"));
+			while (bMore)
+			{
+				bMore = finder.FindNextFile();
+				if (!finder.IsDirectory())
+				{
+					strFound = finder.GetFilePath();
+					break;
+				}
+			}
+			finder.Close();
+		}
+		if (strFound.IsEmpty())
+			return false;
+
+		CString strBinPath = strFound.Left(strFound.ReverseFind(_T('.'))) + _T(".bin");
+		if (!::PathFileExists(strBinPath))
+			return false;
+
+		strParam = strFound;
+		strBin = strBinPath;
+		return true;
+	}
+
+	
+	bool ResolveNcnnModel(const CString& strSel, CString& strParam, CString& strBin)
+	{
+		if (::PathIsDirectory(strSel))
+			return FindNcnnPair(strSel, strParam, strBin);
+
+		CString strExt = ::PathFindExtension(strSel);
+		int nDot = strSel.ReverseFind(_T('.'));
+
+		if (strExt.CompareNoCase(_T(".param")) == 0 && nDot > 0)
+		{
+			CString strBinPath = strSel.Left(nDot) + _T(".bin");
+			if (!::PathFileExists(strBinPath))
+				return false;
+			strParam = strSel;
+			strBin = strBinPath;
+			return true;
+		}
+		if (strExt.CompareNoCase(_T(".bin")) == 0 && nDot > 0)
+		{
+			CString strParamPath = strSel.Left(nDot) + _T(".param");
+			if (!::PathFileExists(strParamPath))
+				return false;
+			strParam = strParamPath;
+			strBin = strSel;
+			return true;
+		}
+
+		if (!::PathFileExists(strSel))
+			return false;
+
+		CString strDir = strSel.Left(strSel.ReverseFind(_T('\\')));
+		CString strStem = ::PathFindFileName(strSel);
+		nDot = strStem.ReverseFind(_T('.'));
+		if (nDot > 0)
+			strStem = strStem.Left(nDot);
+
+		
+		if (FindNcnnPair(strDir + _T("\\") + strStem + _T("_ncnn_model"), strParam, strBin))
+			return true;
+
+		CFileFind finder;
+		BOOL bMore = finder.FindFile(strDir + _T("\\") + strStem + _T("*.param"));
+		while (bMore)
+		{
+			bMore = finder.FindNextFile();
+			if (finder.IsDirectory())
+				continue;
+
+			CString strParamPath = finder.GetFilePath();
+			CString strBinPath = strParamPath.Left(strParamPath.ReverseFind(_T('.'))) + _T(".bin");
+			if (!::PathFileExists(strBinPath))
+				continue;
+
+			strParam = strParamPath;
+			strBin = strBinPath;
+			finder.Close();
+			return true;
+		}
+		finder.Close();
+		return false;
+	}
+
+	float BoxIoU(const NcnnBox& a, const NcnnBox& b)
+	{
+		float ax2 = a.x + a.w, ay2 = a.y + a.h;
+		float bx2 = b.x + b.w, by2 = b.y + b.h;
+		float ix1 = (a.x > b.x) ? a.x : b.x;
+		float iy1 = (a.y > b.y) ? a.y : b.y;
+		float ix2 = (ax2 < bx2) ? ax2 : bx2;
+		float iy2 = (ay2 < by2) ? ay2 : by2;
+		float iw = ix2 - ix1;
+		float ih = iy2 - iy1;
+		if (iw <= 0.0f || ih <= 0.0f)
+			return 0.0f;
+
+		float fInter = iw * ih;
+		float fUnion = a.w * a.h + b.w * b.h - fInter;
+		return fUnion > 0.0f ? fInter / fUnion : 0.0f;
+	}
+
+	void NmsBoxes(std::vector<NcnnBox>& boxes, float fIouThresh)
+	{
+		std::sort(boxes.begin(), boxes.end(), [](const NcnnBox& a, const NcnnBox& b)
+		{
+			return a.fScore > b.fScore;
+		});
+
+		std::vector<NcnnBox> keep;
+		std::vector<bool> bRemoved(boxes.size(), false);
+		for (size_t i = 0; i < boxes.size(); i++)
+		{
+			if (bRemoved[i])
+				continue;
+			keep.push_back(boxes[i]);
+			for (size_t j = i + 1; j < boxes.size(); j++)
+			{
+				if (bRemoved[j] || boxes[j].nClass != boxes[i].nClass)
+					continue;
+				if (BoxIoU(boxes[i], boxes[j]) > fIouThresh)
+					bRemoved[j] = true;
+			}
+		}
+		boxes.swap(keep);
+	}
+
+
+	void DecodeOutput(const ncnn::Mat& out, const std::vector<std::string>& names,
+		float fConf, int nImgsz, float fScale, int nPadX, int nPadY,
+		int imgW, int imgH, std::vector<NcnnBox>& boxes)
+	{
+		ncnn::Mat m = out;
+		if (out.dims == 3)
+		{
+			if (out.c != 1)
+				return;
+			m = out.channel(0);
+		}
+		if (m.dims != 2 || m.w < 5 || m.h < 1)
+			return;
+
+		const int nW = m.w;
+		const int nH = m.h;
+		const int nc = (int)names.size();
+
+		bool bAttrInW = false;
+		int nAttrs = 0;
+		if (nc > 0 && (nW == nc + 4 || nW == nc + 64))
+		{
+			bAttrInW = true;
+			nAttrs = nW;
+		}
+		else if (nc > 0 && (nH == nc + 4 || nH == nc + 64))
+		{
+			bAttrInW = false;
+			nAttrs = nH;
+		}
+		else if (nc > 0)
+		{
+			return;
+		}
+		else if (nW >= 5 && nW <= 100 && nW <= nH)
+		{
+			bAttrInW = true;
+			nAttrs = nW;
+		}
+		else if (nH >= 5 && nH <= 100)
+		{
+			bAttrInW = false;
+			nAttrs = nH;
+		}
+		else
+		{
+			return;
+		}
+
+		const int nBoxes = bAttrInW ? nH : nW;
+		
+		const bool bDfl = (nc > 0) ? (nAttrs == nc + 64) : (nAttrs >= 100);
+		const int nCls = bDfl ? (nAttrs - 64) : (nAttrs - 4);
+		if (nCls < 1)
+			return;
+
+		auto Val = [&](int nBox, int nAttr) -> float
+		{
+			return bAttrInW ? m.row(nBox)[nAttr] : m.row(nAttr)[nBox];
+		};
+
+		const int strides[3] = { 8, 16, 32 };
+		int nOffset[3] = { 0, 0, 0 };
+		for (int s = 1; s < 3; s++)
+		{
+			int g = nImgsz / strides[s - 1];
+			nOffset[s] = nOffset[s - 1] + g * g;
+		}
+
+		for (int j = 0; j < nBoxes; j++)
+		{
+			int nBest = -1;
+			float fBest = 0.0f;
+			for (int k = 0; k < nCls; k++)
+			{
+				float s = Val(j, (bDfl ? 64 : 4) + k);
+				if (s > fBest)
+				{
+					fBest = s;
+					nBest = k;
+				}
+			}
+			if (bDfl)
+				fBest = 1.0f / (1.0f + expf(-fBest));
+			if (nBest < 0 || fBest < fConf)
+				continue;
+
+			float x1, y1, x2, y2;
+			if (bDfl)
+			{
+				int s = (j >= nOffset[2]) ? 2 : (j >= nOffset[1] ? 1 : 0);
+				int nGrid = nImgsz / strides[s];
+				int nIdx = j - nOffset[s];
+				float cx = ((float)(nIdx % nGrid) + 0.5f) * strides[s];
+				float cy = ((float)(nIdx / nGrid) + 0.5f) * strides[s];
+
+				float d[4];
+				for (int k = 0; k < 4; k++)
+				{
+					float fMax = -FLT_MAX;
+					for (int l = 0; l < 16; l++)
+					{
+						float v = Val(j, k * 16 + l);
+						if (v > fMax)
+							fMax = v;
+					}
+
+					float fSum = 0.0f;
+					float fAcc = 0.0f;
+					for (int l = 0; l < 16; l++)
+					{
+						float e = expf(Val(j, k * 16 + l) - fMax);
+						fSum += e;
+						fAcc += l * e;
+					}
+					d[k] = (fSum > 0.0f ? fAcc / fSum : 0.0f) * strides[s];
+				}
+
+				x1 = cx - d[0];
+				y1 = cy - d[1];
+				x2 = cx + d[2];
+				y2 = cy + d[3];
+			}
+			else
+			{
+				float cx = Val(j, 0);
+				float cy = Val(j, 1);
+				float bw = Val(j, 2);
+				float bh = Val(j, 3);
+				x1 = cx - bw * 0.5f;
+				y1 = cy - bh * 0.5f;
+				x2 = cx + bw * 0.5f;
+				y2 = cy + bh * 0.5f;
+			}
+
+			
+			x1 = (x1 - (float)nPadX) / fScale;
+			y1 = (y1 - (float)nPadY) / fScale;
+			x2 = (x2 - (float)nPadX) / fScale;
+			y2 = (y2 - (float)nPadY) / fScale;
+			if (x1 < 0.0f) x1 = 0.0f;
+			if (y1 < 0.0f) y1 = 0.0f;
+			if (x2 > (float)imgW) x2 = (float)imgW;
+			if (y2 > (float)imgH) y2 = (float)imgH;
+			if (x2 <= x1 || y2 <= y1)
+				continue;
+
+			NcnnBox b;
+			b.nClass = nBest;
+			b.fScore = fBest;
+			b.x = x1;
+			b.y = y1;
+			b.w = x2 - x1;
+			b.h = y2 - y1;
+			boxes.push_back(b);
+		}
+	}
+
+	bool DetectImage(const cv::Mat& img, const CString& strParam, const CString& strBin,
+		int nImgsz, float fConf, float fIou, const std::vector<std::string>& names,
+		std::vector<NcnnBox>& boxes, int& nMs, CString& strErr)
+	{
+		ULONGLONG t0 = ::GetTickCount64();
+
+		std::string sIn = "in0";
+		std::string sOut = "out0";
+		std::string sParam;
+		if (ReadFileBytes(strParam, sParam))
+			ParseBlobNames(sParam, sIn, sOut);
+
+		ncnn::Net net;
+		net.opt.use_vulkan_compute = false;
+		net.opt.num_threads = 4;
+		if (net.load_param((const wchar_t*)(LPCTSTR)strParam) != 0 ||
+			net.load_model((const wchar_t*)(LPCTSTR)strBin) != 0)
+		{
+			strErr = _T("NCNN 模型加载失败：") + strParam;
+			return false;
+		}
+
+		
+		float fScale = std::min((float)nImgsz / (float)img.cols, (float)nImgsz / (float)img.rows);
+		int w = (int)((float)img.cols * fScale + 0.5f);
+		int h = (int)((float)img.rows * fScale + 0.5f);
+		if (w < 1) w = 1;
+		if (h < 1) h = 1;
+		if (w > nImgsz) w = nImgsz;
+		if (h > nImgsz) h = nImgsz;
+		int nPadX = (nImgsz - w) / 2;
+		int nPadY = (nImgsz - h) / 2;
+
+		cv::Mat resized;
+		cv::resize(img, resized, cv::Size(w, h));
+		cv::Mat inPad;
+		cv::copyMakeBorder(resized, inPad, nPadY, nImgsz - h - nPadY,
+			nPadX, nImgsz - w - nPadX, cv::BORDER_CONSTANT, cv::Scalar(114, 114, 114));
+
+		ncnn::Mat in = ncnn::Mat::from_pixels(inPad.data, ncnn::Mat::PIXEL_BGR2RGB, nImgsz, nImgsz);
+		const float norm[3] = { 1 / 255.f, 1 / 255.f, 1 / 255.f };
+		in.substract_mean_normalize(0, norm);
+
+		ncnn::Extractor ex = net.create_extractor();
+		ex.set_light_mode(true);
+		ex.input(sIn.c_str(), in);
+
+		ncnn::Mat out;
+		if (ex.extract(sOut.c_str(), out) != 0 || out.empty())
+		{
+			strErr = _T("NCNN 推理失败：输出为空");
+			return false;
+		}
+
+		DecodeOutput(out, names, fConf, nImgsz, fScale, nPadX, nPadY,
+			img.cols, img.rows, boxes);
+		NmsBoxes(boxes, fIou);
+
+		nMs = (int)(::GetTickCount64() - t0);
+		return true;
+	}
+
+	void DrawBoxes(HDC hdc, const std::vector<NcnnBox>& boxes,
+		const std::vector<std::string>& names)
+	{
+		static const COLORREF kColors[] = {
+			RGB(244, 67, 54), RGB(233, 30, 99), RGB(156, 39, 176), RGB(103, 58, 183),
+			RGB(63, 81, 181), RGB(33, 150, 243), RGB(0, 188, 212), RGB(0, 150, 136),
+			RGB(76, 175, 80), RGB(139, 195, 74), RGB(255, 152, 0), RGB(255, 87, 34)
+		};
+		const int nColors = _countof(kColors);
+
+		HFONT hFont = ::CreateFont(-::MulDiv(13, ::GetDeviceCaps(hdc, LOGPIXELSY), 96),
+			0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+			OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+			DEFAULT_PITCH, _T("Microsoft YaHei"));
+		HGDIOBJ hOldFont = ::SelectObject(hdc, hFont);
+		int nOldBk = ::SetBkMode(hdc, TRANSPARENT);
+
+		for (size_t i = 0; i < boxes.size(); i++)
+		{
+			const NcnnBox& b = boxes[i];
+			COLORREF clr = kColors[b.nClass % nColors];
+
+			HPEN hPen = ::CreatePen(PS_SOLID, 2, clr);
+			HGDIOBJ hOldPen = ::SelectObject(hdc, hPen);
+			HGDIOBJ hOldBrush = ::SelectObject(hdc, ::GetStockObject(NULL_BRUSH));
+			::Rectangle(hdc, (int)b.x, (int)b.y, (int)(b.x + b.w), (int)(b.y + b.h));
+			::SelectObject(hdc, hOldBrush);
+			::SelectObject(hdc, hOldPen);
+			::DeleteObject(hPen);
+
+			CString strName;
+			if (b.nClass >= 0 && b.nClass < (int)names.size())
+				strName = Utf8ToText(names[(size_t)b.nClass]);
+			if (strName.IsEmpty())
+				strName.Format(_T("类别%d"), b.nClass);
+
+			CString strText;
+			strText.Format(_T("%s %.2f"), (LPCTSTR)strName, b.fScore);
+
+			SIZE sz = { 0, 0 };
+			::GetTextExtentPoint32(hdc, strText, strText.GetLength(), &sz);
+
+			int tx = (int)b.x;
+			int ty = (int)b.y - sz.cy - 4;
+			if (ty < 0)
+				ty = (int)b.y + 2;
+			RECT rc = { tx, ty, tx + sz.cx + 8, ty + sz.cy + 4 };
+
+			HBRUSH hBrush = ::CreateSolidBrush(clr);
+			::FillRect(hdc, &rc, hBrush);
+			::DeleteObject(hBrush);
+
+			::SetTextColor(hdc, RGB(255, 255, 255));
+			::DrawText(hdc, strText, -1, &rc, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+		}
+
+		::SetBkMode(hdc, nOldBk);
+		::SelectObject(hdc, hOldFont);
+		::DeleteObject(hFont);
+	}
+
+
+	bool LoadImageCv(const CString& strPath, cv::Mat& img)
+	{
+		std::string data;
+		if (!ReadFileBytes(strPath, data) || data.empty())
+			return false;
+
+		std::vector<uchar> buf(data.begin(), data.end());
+		img = cv::imdecode(buf, cv::IMREAD_COLOR);
+		return !img.empty();
+	}
+
+	
+	bool CaptureWindowCv(HWND hwnd, cv::Mat& img)
+	{
+		RECT rc = { 0 };
+		if (!::GetWindowRect(hwnd, &rc))
+			return false;
+
+		int w = rc.right - rc.left;
+		int h = rc.bottom - rc.top;
+		if (w <= 0 || h <= 0)
+			return false;
+
+		BITMAPINFO bi = { 0 };
+		bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+		bi.bmiHeader.biWidth = w;
+		bi.bmiHeader.biHeight = -h;
+		bi.bmiHeader.biPlanes = 1;
+		bi.bmiHeader.biBitCount = 32;
+		bi.bmiHeader.biCompression = BI_RGB;
+
+		HDC hdcMem = ::CreateCompatibleDC(NULL);
+		if (hdcMem == NULL)
+			return false;
+
+		void* pBits = NULL;
+		HBITMAP hbm = ::CreateDIBSection(hdcMem, &bi, DIB_RGB_COLORS, &pBits, NULL, 0);
+		if (hbm == NULL || pBits == NULL)
+		{
+			::DeleteDC(hdcMem);
+			return false;
+		}
+		HGDIOBJ hOld = ::SelectObject(hdcMem, hbm);
+
+		bool bOk = ::PrintWindow(hwnd, hdcMem, kPwRenderFullContent) != FALSE;
+		if (!bOk)
+		{
+			HDC hdcWin = ::GetWindowDC(hwnd);
+			if (hdcWin != NULL)
+			{
+				bOk = ::BitBlt(hdcMem, 0, 0, w, h, hdcWin, 0, 0, SRCCOPY) != FALSE;
+				::ReleaseDC(hwnd, hdcWin);
+			}
+		}
+
+		if (bOk)
+		{
+			cv::Mat bgra(h, w, CV_8UC4, pBits);
+			cv::cvtColor(bgra, img, cv::COLOR_BGRA2BGR);
+		}
+
+		::SelectObject(hdcMem, hOld);
+		::DeleteObject(hbm);
+		::DeleteDC(hdcMem);
+		return bOk;
+	}
+
+	bool MatToCImage(const cv::Mat& img, CImage& out)
+	{
+		if (img.empty() || img.type() != CV_8UC3)
+			return false;
+		if (!out.Create(img.cols, img.rows, 24))
+			return false;
+
+		for (int y = 0; y < img.rows; y++)
+			memcpy(out.GetPixelAddress(0, y), img.ptr(y), (size_t)img.cols * 3);
+		return true;
+	}
+}
+
+
 
 
 CPageTest::CPageTest(CWnd* pParent /*=nullptr*/)
@@ -258,7 +715,6 @@ BEGIN_MESSAGE_MAP(CPageTest, CDialogEx)
 	ON_BN_CLICKED(IDC_BTN_TEST_REFRESH, &CPageTest::OnBnClickedBtnTestRefresh)
 	ON_BN_CLICKED(IDC_BTN_TEST_DETECT, &CPageTest::OnBnClickedBtnTestDetect)
 	ON_BN_CLICKED(IDC_BTN_TEST_IMAGE, &CPageTest::OnBnClickedBtnTestImage)
-	ON_BN_CLICKED(IDC_BTN_TEST_NCNN, &CPageTest::OnBnClickedBtnTestNcnn)
 	ON_CBN_SELCHANGE(IDC_COMBO_TEST_MODEL, &CPageTest::OnCbnSelchangeComboTestModel)
 	ON_MESSAGE(WM_FINDER_PICKED, &CPageTest::OnFinderPicked)
 	ON_WM_HELPINFO()
@@ -382,8 +838,6 @@ void CPageTest::Layout()
 	mv(IDC_LBL_TEST_IOU, x, ROW2 + 6, 28, 14);
 	x += 28 + 4;
 	mv(IDC_EDIT_TEST_IOU, x, ROW2, 42, CH);
-	x += 42 + 8;
-	mv(IDC_BTN_TEST_NCNN, x, ROW2, 68, CH);
 
 	mv(IDC_STATIC_TEST_ZOOM, W - M - 80, ROW2 + 6, 56, 14);
 
@@ -453,6 +907,17 @@ void CPageTest::FillModelCombo()
 				arrFiles.Add(finder.GetFileURL());
 		}
 		finder.Close();
+
+		
+		CFileFind finderNcnn;
+		BOOL bMoreNcnn = finderNcnn.FindFile(arrDirs[d] + _T("\\*_ncnn_model"));
+		while (bMoreNcnn)
+		{
+			bMoreNcnn = finderNcnn.FindNextFile();
+			if (finderNcnn.IsDirectory() && !finderNcnn.IsDots())
+				arrFiles.Add(finderNcnn.GetFileURL());
+		}
+		finderNcnn.Close();
 	}
 
 	for (INT_PTR i = 0; i < arrFiles.GetSize(); i++)
@@ -592,14 +1057,6 @@ HWND CPageTest::GetTargetHandle(bool bShowError)
 }
 
 
-
-
-
-
-
-
-
-
 void CPageTest::OnBnClickedBtnTestDetect()
 {
 	StartDetect();
@@ -638,21 +1095,20 @@ void CPageTest::StartDetect()
 		AfxMessageBox(_T("请先选择模型（可点「刷新」重新扫描 models 目录）。"), MB_ICONWARNING);
 		return;
 	}
+
+	CString strParam, strBin;
+	if (!ResolveNcnnModel(strModel, strParam, strBin))
+	{
+		AfxMessageBox(_T("未找到 NCNN 模型（需要 param 与 bin 文件）。\r\n")
+			_T("请先导出 NCNN 模型，或在下拉框中选择 *_ncnn_model 目录。"), MB_ICONWARNING);
+		return;
+	}
+
 	SaveLastModel();
 
 	HWND hwnd = GetTargetHandle(true);
 	if (hwnd == NULL)
 		return;
-
-	CString strGreen = GetGreenRoot();
-	CString strPython = GetGreenPython();
-	CString strScript = strGreen + _T("\\scripts\\infer_ui.py");
-	if (strGreen.IsEmpty() || !::PathFileExists(strPython) || !::PathFileExists(strScript))
-	{
-		AfxMessageBox(_T("未找到 scripts\\infer_ui.py，请检查绿色包是否完整。"), MB_ICONWARNING);
-		SetStatus(_T("就绪"));
-		return;
-	}
 
 	if (m_strResultPath.IsEmpty())
 	{
@@ -661,16 +1117,15 @@ void CPageTest::StartDetect()
 		return;
 	}
 
-	int nImgsz = 640;
-	double dConf = 0.25, dIou = 0.45;
-	ReadDetectParams(nImgsz, dConf, dIou);
+	cv::Mat img;
+	if (!CaptureWindowCv(hwnd, img))
+	{
+		AfxMessageBox(_T("窗口截图失败，请确认目标窗口未最小化。"), MB_ICONWARNING);
+		SetStatus(_T("就绪"));
+		return;
+	}
 
-	CString strCmd;
-	strCmd.Format(_T("\"%s\" \"%s\" --weights \"%s\" --hwnd 0x%I64X --imgsz %d --conf %.2f --iou %.2f --mode single --out \"%s\""),
-		(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strModel,
-		(unsigned __int64)(UINT_PTR)hwnd, nImgsz, dConf, dIou, (LPCTSTR)m_strResultPath);
-
-	ExecuteInference(strCmd, strGreen);
+	RunNcnnOnBitmap(strParam, strBin, img.data, img.cols, img.rows);
 }
 
 void CPageTest::StartImageDetect()
@@ -681,17 +1136,16 @@ void CPageTest::StartImageDetect()
 		AfxMessageBox(_T("请先选择模型（可点「刷新」重新扫描 models 目录）。"), MB_ICONWARNING);
 		return;
 	}
-	SaveLastModel();
 
-	CString strGreen = GetGreenRoot();
-	CString strPython = GetGreenPython();
-	CString strScript = strGreen + _T("\\scripts\\infer_ui.py");
-	if (strGreen.IsEmpty() || !::PathFileExists(strPython) || !::PathFileExists(strScript))
+	CString strParam, strBin;
+	if (!ResolveNcnnModel(strModel, strParam, strBin))
 	{
-		AfxMessageBox(_T("未找到 scripts\\infer_ui.py，请检查绿色包是否完整。"), MB_ICONWARNING);
-		SetStatus(_T("就绪"));
+		AfxMessageBox(_T("未找到 NCNN 模型（需要 param 与 bin 文件）。\r\n")
+			_T("请先导出 NCNN 模型，或在下拉框中选择 *_ncnn_model 目录。"), MB_ICONWARNING);
 		return;
 	}
+
+	SaveLastModel();
 
 	if (m_strResultPath.IsEmpty())
 	{
@@ -713,282 +1167,80 @@ void CPageTest::StartImageDetect()
 	if (dlg.DoModal() != IDOK)
 		return;
 
-	CString strImage = dlg.GetPathName();
+	cv::Mat img;
+	if (!LoadImageCv(dlg.GetPathName(), img))
+	{
+		AfxMessageBox(_T("图片加载失败，请确认文件格式（jpg/png/bmp）。"), MB_ICONWARNING);
+		SetStatus(_T("就绪"));
+		return;
+	}
 
+	RunNcnnOnBitmap(strParam, strBin, img.data, img.cols, img.rows);
+}
+
+void CPageTest::RunNcnnOnBitmap(const CString& strParam, const CString& strBin,
+	void* pBgr, int w, int h)
+{
 	int nImgsz = 640;
 	double dConf = 0.25, dIou = 0.45;
 	ReadDetectParams(nImgsz, dConf, dIou);
 
-	CString strCmd;
-	strCmd.Format(_T("\"%s\" \"%s\" --weights \"%s\" --image \"%s\" --imgsz %d --conf %.2f --iou %.2f --out \"%s\""),
-		(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strModel,
-		(LPCTSTR)strImage, nImgsz, dConf, dIou, (LPCTSTR)m_strResultPath);
-
-	ExecuteInference(strCmd, strGreen);
-}
-
-void CPageTest::OnBnClickedBtnTestNcnn()
-{
-	/*if (::GetFileAttributesA(k_ncnnBinPath) == INVALID_FILE_ATTRIBUTES|| ::GetFileAttributesA(k_ncnnParamPath) == INVALID_FILE_ATTRIBUTES)
-	{
-		AfxMessageBox(_T("未找到 NCNN 测试模型:\n") + CString(k_ncnnBinPath), MB_ICONWARNING);
-		return;
-	}
-
-	CFileDialog dlg(TRUE, _T("jpg"), NULL,
-		OFN_FILEMUSTEXIST | OFN_HIDEREADONLY,
-		_T("图片文件 (*.jpg;*.jpeg;*.png;*.bmp)|*.jpg;*.jpeg;*.png;*.bmp|所有文件 (*.*)|*.*||"), this);
-
-	CString strInitDir = GetProjectImagesDir();
-	if (!::PathIsDirectory(strInitDir))
-		strInitDir = GetProjectRoot();
-	if (::PathIsDirectory(strInitDir))
-		dlg.m_ofn.lpstrInitialDir = (LPCTSTR)strInitDir;
-
-	if (dlg.DoModal() != IDOK)
-		return;
+	std::vector<std::string> names = LoadClassNames(strParam);
+	std::vector<NcnnBox> boxes;
+	CString strErr;
+	int nMs = 0;
 
 	SetRunning(true);
 	SetStatus(_T("NCNN 推理中..."));
 	AfxGetApp()->DoWaitCursor(1);
 
-	CString strResult = RunNcnnDetect(dlg.GetPathName());
+	cv::Mat img(h, w, CV_8UC3, pBgr);
+	bool bOk = DetectImage(img, strParam, strBin, nImgsz,
+		(float)dConf, (float)dIou, names, boxes, nMs, strErr);
 
-	AfxGetApp()->DoWaitCursor(0);
-	SetRunning(false);
-
-	if (strResult.IsEmpty())
+	CImage out;
+	if (bOk)
 	{
-		SetStatus(_T("NCNN 推理完成：未检测到目标"));
-		AfxMessageBox(_T("未检测到目标。"), MB_ICONINFORMATION);
-	}
-	else
-	{
-		SetStatus(_T("NCNN 推理完成"));
-		AfxMessageBox(strResult, MB_ICONINFORMATION);
-	}*/
-}
+		if (MatToCImage(img, out))
+		{
+			HDC hdc = out.GetDC();
+			DrawBoxes(hdc, boxes, names);
+			out.ReleaseDC();
 
-// 使用固定的 NCNN 模型对单张图片推理，返回 "类名,置信度,x,y,w,h|..." 格式的坐标框
-CString CPageTest::RunNcnnDetect(const CString& strImagePath)
-{
-	//std::string sBin(k_ncnnBinPath);
-	//if (sBin.size() < 5)
-	//	return _T("[NCNN] 模型路径无效");
-	//std::string sParam = sBin.substr(0, sBin.size() - 4) + ".param";
-	//std::string sDir = sBin.substr(0, sBin.find_last_of("\\/"));
-	//int nImgsz = 640;
-	//double dConf = 0.25, dIou = 0.45;
-	//ReadDetectParams(nImgsz, dConf, dIou);
-	//// 类别名：优先从模型目录的 metadata.yaml 读取
-	//std::vector<std::string> names;
-	//{
-	//	std::string sText;
-	//	if (ReadTextFileNarrow(sDir + "\\metadata.yaml", sText))
-	//		ParseNcnnNames(sText, names);
-	//}
-	//// blob 名：从 param 解析，退回 in0/out0
-	//std::string sIn = "in0", sOut = "out0";
-	//{
-	//	std::string sText;
-	//	if (ReadTextFileNarrow(sParam, sText))
-	//		ParseNcnnBlobNames(sText, sIn, sOut);
-	//}
-	//CImage img;
-	//if (FAILED(img.Load(strImagePath)))
-	//	return _T("[NCNN] 图片加载失败");
-	//int W = img.GetWidth();
-	//int H = img.GetHeight();
-	//if (W <= 0 || H <= 0)
-	//	return _T("[NCNN] 图片尺寸无效");
-	//// 统一转成 32 位 top-down DIB，便于按 BGRA 顺序取样
-	//BITMAPINFO bi = { 0 };
-	//bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-	//bi.bmiHeader.biWidth = W;
-	//bi.bmiHeader.biHeight = -H;
-	//bi.bmiHeader.biPlanes = 1;
-	//bi.bmiHeader.biBitCount = 32;
-	//bi.bmiHeader.biCompression = BI_RGB;
-	//void* pBits = NULL;
-	//HDC hdcMem = ::CreateCompatibleDC(NULL);
-	//HBITMAP hbm = ::CreateDIBSection(hdcMem, &bi, DIB_RGB_COLORS, &pBits, NULL, 0);
-	//if (hbm == NULL || pBits == NULL)
-	//{
-	//	::DeleteDC(hdcMem);
-	//	return _T("[NCNN] 图像缓冲创建失败");
-	//}
-	//HGDIOBJ hOld = ::SelectObject(hdcMem, hbm);
-	//img.Draw(hdcMem, 0, 0, W, H, 0, 0, W, H);
-	//std::vector<unsigned char> rgb;
-	//float fScale = 1.0f;
-	//int nPadX = 0, nPadY = 0;
-	//BuildLetterboxRgb((const BYTE*)pBits, W, H, W * 4, nImgsz, rgb, fScale, nPadX, nPadY);
-	//::SelectObject(hdcMem, hOld);
-	//::DeleteObject(hbm);
-	//::DeleteDC(hdcMem);
-	//ncnn::Net net;
-	//net.opt.use_vulkan_compute = false;
-	//net.opt.num_threads = 4;
-	//if (net.load_param(k_ncnnParamPath) != 0 || net.load_model(k_ncnnBinPath) != 0)
-	//	return _T("[NCNN] 模型加载失败");
-	//ncnn::Mat in = ncnn::Mat::from_pixels(rgb.data(), ncnn::Mat::PIXEL_RGB, nImgsz, nImgsz);
-	//const float normVals[3] = { 1.0f / 255.0f, 1.0f / 255.0f, 1.0f / 255.0f };
-	//in.substract_mean_normalize(0, normVals);
-	//ncnn::Extractor ex = net.create_extractor();
-	//ex.set_light_mode(true);
-	//ex.input(sIn.c_str(), in);
-	//ncnn::Mat out;
-	//if (ex.extract(sOut.c_str(), out) != 0 || out.empty())
-	//	return _T("[NCNN] 推理输出为空");
-	//// 输出布局自适应：属性数(4+类别数) 可能落在 w / h / c 任一方向
-	//int nAttrs = 0, nBoxes = 0;
-	//int nAttrAxis = -1; // 0=w 1=h 2=c
-	//int nTotal = out.w * out.h * (out.dims == 3 ? out.c : 1);
-	//if (out.h > 1 && out.h <= 100 && out.h <= out.w)
-	//{
-	//	nAttrAxis = 1;
-	//	nAttrs = out.h;
-	//	nBoxes = out.w;
-	//}
-	//else if (out.w > 1 && out.w <= 100)
-	//{
-	//	nAttrAxis = 0;
-	//	nAttrs = out.w;
-	//	nBoxes = out.h;
-	//}
-	//else if (out.dims == 3 && out.c > 1 && out.c <= 100)
-	//{
-	//	nAttrAxis = 2;
-	//	nAttrs = out.c;
-	//	nBoxes = out.w * out.h;
-	//}
-	//else
-	//{
-	//	CString strErr;
-	//	strErr.Format(_T("[NCNN] 输出维度无法识别 (dims=%d w=%d h=%d c=%d)"),
-	//		out.dims, out.w, out.h, out.c);
-	//	return strErr;
-	//}
-	//if (nAttrs < 5 || nBoxes < 1 || nAttrs * nBoxes != nTotal)
-	//{
-	//	CString strErr;
-	//	strErr.Format(_T("[NCNN] 输出维度无法识别 (dims=%d w=%d h=%d c=%d)"),
-	//		out.dims, out.w, out.h, out.c);
-	//	return strErr;
-	//}
-	//ncnn::Mat mat2D = out;
-	//if (out.dims == 3 && out.c == 1)
-	//	mat2D = out.channel(0);
-	//auto GetVal = [&](int nBox, int nAttr) -> float
-	//{
-	//	if (nAttrAxis == 1)
-	//		return mat2D.row(nAttr)[nBox];
-	//	if (nAttrAxis == 0)
-	//		return mat2D.row(nBox)[nAttr];
-	//	// 属性在 channel 方向
-	//	const ncnn::Mat& mc = out.channel(nAttr);
-	//	return (mc.h == 1) ? mc.row(0)[nBox] : mc.row(nBox)[0];
-	//};
-	//const int nCls = nAttrs - 4;
-	//std::vector<NcnnDetection> dets;
-	//for (int j = 0; j < nBoxes; j++)
-	//{
-	//	float cx = GetVal(j, 0);
-	//	float cy = GetVal(j, 1);
-	//	float bw = GetVal(j, 2);
-	//	float bh = GetVal(j, 3);
-	//	int nBest = -1;
-	//	float fBest = 0.0f;
-	//	for (int k = 0; k < nCls; k++)
-	//	{
-	//		float s = GetVal(j, 4 + k);
-	//		if (s > fBest)
-	//		{
-	//			fBest = s;
-	//			nBest = k;
-	//		}
-	//	}
-	//	if (nBest < 0 || fBest < (float)dConf)
-	//		continue;
-	//	float x1 = (cx - bw * 0.5f - (float)nPadX) / fScale;
-	//	float y1 = (cy - bh * 0.5f - (float)nPadY) / fScale;
-	//	float x2 = (cx + bw * 0.5f - (float)nPadX) / fScale;
-	//	float y2 = (cy + bh * 0.5f - (float)nPadY) / fScale;
-	//	if (x1 < 0.0f) x1 = 0.0f;
-	//	if (y1 < 0.0f) y1 = 0.0f;
-	//	if (x2 > (float)W) x2 = (float)W;
-	//	if (y2 > (float)H) y2 = (float)H;
-	//	if (x2 <= x1 || y2 <= y1)
-	//		continue;
-	//	NcnnDetection d;
-	//	d.nClass = nBest;
-	//	d.fConf = fBest;
-	//	d.x = x1;
-	//	d.y = y1;
-	//	d.w = x2 - x1;
-	//	d.h = y2 - y1;
-	//	dets.push_back(d);
-	//}
-	//NcnnNms(dets, (float)dIou);
-	//CString strResult;
-	//for (size_t i = 0; i < dets.size(); i++)
-	//{
-	//	CString strName;
-	//	if (dets[i].nClass < (int)names.size() && !names[(size_t)dets[i].nClass].empty())
-	//		strName = WstrFromUtf8(names[(size_t)dets[i].nClass]);
-	//	else
-	//		strName.Format(_T("类别%d"), dets[i].nClass);
-	//	CString strItem;
-	//	strItem.Format(_T("%s,%.2f,%d,%d,%d,%d"),
-	//		(LPCTSTR)strName, dets[i].fConf,
-	//		(int)dets[i].x, (int)dets[i].y, (int)dets[i].w, (int)dets[i].h);
-	//	if (!strResult.IsEmpty())
-	//		strResult += _T("|");
-	//	strResult += strItem;
-	//}
-	//return strResult;
-return L"";
-}
-
-void CPageTest::ExecuteInference(const CString& strCmd, const CString& strGreen)
-{
-	m_ullResultTime = 0;
-	::DeleteFile(m_strResultPath);
-	m_wndPreview.SetImage(NULL);
-
-	SetRunning(true);
-	SetStatus(_T("检测中..."));
-	AfxGetApp()->DoWaitCursor(1);
-
-	STARTUPINFO si = { sizeof(si) };
-	si.dwFlags = STARTF_USESHOWWINDOW;
-	si.wShowWindow = SW_HIDE;
-	PROCESS_INFORMATION pi = { 0 };
-	DWORD dwExit = (DWORD)-1;
-
-	if (::CreateProcess(NULL, (LPTSTR)(LPCTSTR)strCmd, NULL, NULL, FALSE,
-		CREATE_NO_WINDOW, NULL, strGreen, &si, &pi))
-	{
-		::WaitForSingleObject(pi.hProcess, INFINITE);
-		::GetExitCodeProcess(pi.hProcess, &dwExit);
-		::CloseHandle(pi.hThread);
-		::CloseHandle(pi.hProcess);
+			if (FAILED(out.Save(m_strResultPath)))
+			{
+				bOk = false;
+				strErr = _T("结果图写入失败：") + m_strResultPath;
+			}
+		}
+		else
+		{
+			bOk = false;
+			strErr = _T("结果图创建失败。");
+		}
 	}
 
 	AfxGetApp()->DoWaitCursor(0);
 	SetRunning(false);
 
-	if (dwExit == 0 && ::PathFileExists(m_strResultPath))
+	if (!bOk)
 	{
-		SetStatus(_T("检测完成"));
-		LoadResultImage();
-	}
-	else
-	{
-		AfxMessageBox(_T("检测失败，请确认模型与绿色包环境完整。"), MB_ICONWARNING);
+		AfxMessageBox(strErr, MB_ICONWARNING);
 		SetStatus(_T("就绪"));
+		return;
 	}
+
+	m_ullResultTime = 0;
+	LoadResultImage();
+
+	CString strStatus;
+	if (boxes.empty())
+		strStatus.Format(_T("检测完成：未检测到目标，用时 %d ms"), nMs);
+	else
+		strStatus.Format(_T("检测完成：%d 个目标，用时 %d ms"), (int)boxes.size(), nMs);
+	SetStatus(strStatus);
 }
+
 
 void CPageTest::SetRunning(bool bRunning)
 {
@@ -1002,7 +1254,7 @@ void CPageTest::SetRunning(bool bRunning)
 	UINT ids[] = {
 		IDC_COMBO_TEST_MODEL, IDC_BTN_TEST_OPEN, IDC_BTN_TEST_REFRESH, IDC_BTN_TEST_IMAGE,
 		IDC_EDIT_TEST_IMGSZ, IDC_EDIT_TEST_HANDLE, IDC_FINDER_TEST,
-		IDC_EDIT_TEST_CONF, IDC_EDIT_TEST_IOU, IDC_BTN_TEST_NCNN
+		IDC_EDIT_TEST_CONF, IDC_EDIT_TEST_IOU
 	};
 	for (int i = 0; i < _countof(ids); i++)
 	{
@@ -1047,7 +1299,7 @@ void CPageTest::OnBnClickedBtnTestOpen()
 {
 	CFileDialog dlg(TRUE, _T("pt"), NULL,
 		OFN_FILEMUSTEXIST | OFN_HIDEREADONLY,
-		_T("模型文件 (*.pt)|*.pt|所有文件 (*.*)|*.*||"), this);
+		_T("模型文件 (*.pt;*.param)|*.pt;*.param|所有文件 (*.*)|*.*||"), this);
 
 	CString strInitDir = GetProjectModelsDir();
 	if (!::PathIsDirectory(strInitDir))

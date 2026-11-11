@@ -44,7 +44,6 @@ private:
 	void HideToTray();
 	void RestoreFromTray();
 
-	// 返回 0=取消，1=最小化到托盘，2=退出程序
 	int  AskCloseAction();
 
 	CTabCtrl       m_tab;

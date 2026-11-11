@@ -228,7 +228,7 @@ static bool IsAbsDirPath(const CString& strPath)
 	return strPath.GetLength() >= 2 && strPath[1] == _T(':');
 }
 
-// 校验并修正 data.yaml 中的 path/train/val：项目目录被复制到别处后绝对路径会失效
+
 static bool RepairDataYamlFile(const CString& strDataset)
 {
 	if (strDataset.IsEmpty())
@@ -457,16 +457,22 @@ CString GetProjectOutputDir()
 	return strGreen + _T("\\output\\ui");
 }
 
-// 从目录名解析训练序号：train -> 1，train2 -> 2，train3 -> 3；不匹配返回 0
+
 static int ParseTrainRunNumber(const CString& strName)
 {
 	if (strName == _T("train"))
 		return 1;
 	if (strName.GetLength() <= 5 || strName.Left(5) != _T("train"))
 		return 0;
+
 	CString strNum = strName.Mid(5);
 	if (strNum.IsEmpty())
 		return 0;
+
+	strNum.Replace(_T("-"), _T(""));
+	if (strNum.IsEmpty())
+		return 0;
+
 	for (int i = 0; i < strNum.GetLength(); i++)
 	{
 		TCHAR ch = strNum[i];
@@ -482,7 +488,6 @@ CString GetBestWeightPath()
 	if (strRuns.IsEmpty())
 		return _T("");
 
-	// 遍历 runs/detect 下所有子目录，找出编号最大的 trainN（train 视为 1）
 	CString strLatest;
 	int nMaxNum = 0;
 	{
@@ -506,7 +511,6 @@ CString GetBestWeightPath()
 		finder.Close();
 	}
 
-	// 未找到任何 train 目录时回退到 train（保持原行为，调用方会再做存在性校验）
 	if (strLatest.IsEmpty())
 		strLatest = _T("train");
 

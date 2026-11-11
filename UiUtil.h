@@ -9,12 +9,6 @@ inline int UiDpi(HWND hwnd)
 }
 
 
-inline int UiScale(HWND hwnd, int v)
-{
-	return ::MulDiv(v, UiDpi(hwnd), 96);
-}
-
-
 inline bool UiIsMultilineEdit(HWND hwnd)
 {
 	TCHAR szClass[64] = { 0 };

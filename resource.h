@@ -91,9 +91,6 @@
 #define IDC_FINDER_TEST                 1168
 #define IDC_LBL_TEST_HANDLE             1169
 #define IDC_EDIT_TEST_HANDLE            1170
-#define IDC_LBL_TEST_MODE               1172
-#define IDC_RADIO_TEST_SINGLE           1173
-#define IDC_RADIO_TEST_CONT             1174
 #define IDC_BTN_TEST_DETECT             1175
 #define IDC_LBL_TEST_CONF               1176
 #define IDC_EDIT_TEST_CONF              1177
@@ -105,8 +102,6 @@
 #define IDC_LBL_AI_MODEL                1183
 #define IDC_EDIT_AI_MODEL               1184
 #define IDC_BTN_TEST_IMAGE              1185
-#define IDC_BTN_TEST_NCNN               1186
-#define IDC_CHECK1                      1187
 #define IDC_CHK_EXIT                    1187
 #define IDC_CLOSE_TRAY                  1188
 #define IDC_CLOSE_EXIT                  1189

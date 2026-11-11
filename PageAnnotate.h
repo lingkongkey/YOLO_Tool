@@ -20,7 +20,6 @@ struct AiBoxData
 
 struct AiAnnotateResult
 {
-	int nIndex = 0;
 	std::wstring strImage;
 	bool bOk = false;
 	std::wstring strError;

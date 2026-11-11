@@ -24,7 +24,6 @@ public:
 	CString strTestModel;
 
 	// ===== UI =====
-	// 关闭方式记忆：空=每次询问，tray=最小化到托盘，exit=退出程序
 	CString strCloseAction;
 
 private:

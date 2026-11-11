@@ -28,7 +28,6 @@ protected:
 	afx_msg void OnBnClickedBtnTestRefresh();
 	afx_msg void OnBnClickedBtnTestDetect();
 	afx_msg void OnBnClickedBtnTestImage();
-	afx_msg void OnBnClickedBtnTestNcnn();
 	afx_msg void OnCbnSelchangeComboTestModel();
 	afx_msg LRESULT OnFinderPicked(WPARAM wParam, LPARAM lParam);
 	DECLARE_MESSAGE_MAP()
@@ -50,14 +49,13 @@ private:
 	void StartDetect();
 	void StartImageDetect();
 	void ReadDetectParams(int& nImgsz, double& dConf, double& dIou);
-	void ExecuteInference(const CString& strCmd, const CString& strGreen);
+	void RunNcnnOnBitmap(const CString& strParam, const CString& strBin,
+		void* pBgr, int w, int h);
 	void SetRunning(bool bRunning);
 	
 	void SetStatus(LPCTSTR lpszText);
 
 	void LoadResultImage();
-
-	CString RunNcnnDetect(const CString& strImagePath);
 
 	CPreviewStatic  m_wndPreview;      
 	CFinderStatic   m_wndFinder;       
