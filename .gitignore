@@ -29,6 +29,10 @@ Release/
 *.exp
 *.res
 
+# 项目依赖的第三方静态库（ncnn/opencv，体积数百 MB），不入库
+c++/lib/x64/*.lib
+c++/lib/x86/*.lib
+
 # 项目依赖的第三方静态库（zlib），需要随源码入库
 !File/lib/x86/
 !File/lib/x86/**
