@@ -624,7 +624,7 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 		}
 
 		strCmd.Format(
-			_T("\"%s\" -X utf8 -u \"%s\" --weights \"%s\" --resume True"),
+			_T("\"%s\" -X utf8 -u \"%s\" --weights \"%s\" --resume"),
 			(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)lastPath);
 	}
 	else
