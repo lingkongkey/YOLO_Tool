@@ -19,7 +19,6 @@
 #endif
 
 #define IDT_AUTO_CAPTURE    1
-#define IDT_STATUS_REFRESH  2
 
 static const double DIFF_RATIO_THRESHOLD = 0.005;  
 static const double DIFF_MEAN_THRESHOLD  = 1.5;   
@@ -105,7 +104,6 @@ BOOL CPageCapture::OnInitDialog()
 	
 	FillCaptureList();
 
-	SetTimer(IDT_STATUS_REFRESH, 1000, NULL);
 	return TRUE;
 }
 
@@ -184,7 +182,6 @@ void CPageCapture::OnDestroy()
 		KillTimer(IDT_AUTO_CAPTURE);
 		m_bAuto = false;
 	}
-	KillTimer(IDT_STATUS_REFRESH);
 
 	CDialogEx::OnDestroy();
 }
@@ -193,8 +190,6 @@ void CPageCapture::OnTimer(UINT_PTR nIDEvent)
 {
 	if (nIDEvent == IDT_AUTO_CAPTURE)
 		CaptureOnce();
-	else if (nIDEvent == IDT_STATUS_REFRESH)
-		RefreshDirCount();
 	CDialogEx::OnTimer(nIDEvent);
 }
 
@@ -393,10 +388,9 @@ bool CPageCapture::CaptureOnce()
 
 	bool bClientOnly = (IsDlgButtonChecked(IDC_CHK_CLIENT) == BST_CHECKED);
 
-	// 张数限制：按项目照片总数（保存目录中的图片数量）计算
+	// 张数限制：按内存中的项目照片总数计算，不扫盘
 	if (m_bAuto)
 	{
-		RefreshDirCount();
 		int nLimit = GetMaxCount();
 		if (nLimit > 0 && m_nDirCount >= nLimit)
 		{
@@ -450,8 +444,8 @@ bool CPageCapture::CaptureOnce()
 	m_imgPrevThumb.Destroy();
 	m_imgPrevThumb.Attach(thumb.Detach());
 	m_wndPreview.SetImage(&image);
-	FillCaptureList();
-	RefreshDirCount();
+	m_nDirCount++;          // 新增一张，内存计数 +1，不再扫盘
+	AddCaptureToFront(strFile);
 	UpdateStatus(m_bAuto ? _T("自动截图中") : _T("就绪"));
 	return true;
 }
@@ -461,7 +455,6 @@ void CPageCapture::StartAuto()
 	if (!ValidateTarget(true))
 		return;
 
-	RefreshDirCount();
 	int nLimit = GetMaxCount();
 	if (nLimit > 0 && m_nDirCount >= nLimit)
 	{
@@ -650,6 +643,7 @@ void CPageCapture::OnBnClickedBtnBrowse()
 
 	m_strSaveDir = GetProjectImagesDir();
 	SetDlgItemText(IDC_EDIT_SAVE_DIR, m_strSaveDir);
+	RefreshDirCount();      // 更换目录后重新统计一次
 	FillCaptureList();
 	UpdateStatus(_T("就绪"));
 
@@ -808,6 +802,17 @@ void CPageCapture::FillCaptureList()
 	m_nCurCapture = nSel;
 	int nSize = m_nPageSize > 0 ? m_nPageSize : kCapPageSizes[0];
 	m_nCurPage = (nSel >= 0) ? nSel / nSize : 0;
+
+	RefreshCapPage();
+	UpdateCapPageInfo();
+}
+
+// 新截图直接插到列表头部（最新在前），不重新扫描目录
+void CPageCapture::AddCaptureToFront(const CString& strFile)
+{
+	m_arrCaptures.InsertAt(0, strFile);
+	m_nCurCapture = 0;
+	m_nCurPage = 0;
 
 	RefreshCapPage();
 	UpdateCapPageInfo();
@@ -1016,9 +1021,27 @@ void CPageCapture::ShowCaptureMenu(int x, int y)
 			AfxMessageBox(_T("删除失败: ") + strFile, MB_ICONWARNING);
 			return;
 		}
+		if (m_nDirCount > 0)
+			m_nDirCount--;      // 删除一张，内存计数 -1，不再扫盘
 
-		FillCaptureList();
-		RefreshDirCount();
+		// 直接从内存数组移除，不重新扫描目录
+		m_arrCaptures.RemoveAt(nSel);
+		int nTotal = (int)m_arrCaptures.GetSize();
+		int nSize = m_nPageSize > 0 ? m_nPageSize : kCapPageSizes[0];
+		int nPages = (nTotal + nSize - 1) / nSize;
+		if (nPages < 1)
+			nPages = 1;
+		if (m_nCurPage >= nPages)
+			m_nCurPage = nPages - 1;
+
+		// 选中原位置的下一条；删的是最后一条则选新的最后一条
+		m_nCurCapture = (nSel < nTotal) ? nSel : nTotal - 1;
+
+		if (nTotal <= 0)
+			m_wndPreview.SetImage(NULL);
+
+		RefreshCapPage();
+		UpdateCapPageInfo();
 		UpdateStatus(m_bAuto ? _T("自动截图中") : _T("就绪"));
 	}
 	else if (nCmd == 2)

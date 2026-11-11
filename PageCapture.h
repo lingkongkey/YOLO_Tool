@@ -74,6 +74,7 @@ private:
 	int  GetMaxCount();
 
 	void InitCapPageSizeCombo();
+	void AddCaptureToFront(const CString& strFile);
 	void RefreshCapPage();
 	void GotoCapPage(int nPage);
 	void UpdateCapPageInfo();
