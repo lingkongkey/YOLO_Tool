@@ -33,6 +33,9 @@ void CAppConfig::SetDefaults()
 
 	strTestModel  = _T("");
 
+	strCaptureInterval = _T("");
+	strCaptureLimit    = _T("");
+
 	strCloseAction = _T("");
 }
 
@@ -100,6 +103,9 @@ bool CAppConfig::LoadAll()
 
 	strTestModel   = ReadStr("Test", "Model",          strTestModel);
 
+	strCaptureInterval = ReadStr("Capture", "Interval", strCaptureInterval);
+	strCaptureLimit    = ReadStr("Capture", "Limit",    strCaptureLimit);
+
 	strCloseAction = ReadStr("Ui", "CloseAction", strCloseAction);
 
 	return true;
@@ -116,6 +122,9 @@ bool CAppConfig::SaveAll()
 	WriteStr("Annotate", "AiModel",     strAiModel);
 
 	WriteStr("Test",     "Model",       strTestModel);
+
+	WriteStr("Capture",  "Interval",    strCaptureInterval);
+	WriteStr("Capture",  "Limit",       strCaptureLimit);
 
 	WriteStr("Ui",       "CloseAction", strCloseAction);
 

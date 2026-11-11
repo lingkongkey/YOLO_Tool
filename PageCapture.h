@@ -32,6 +32,11 @@ protected:
 	afx_msg void OnBnClickedBtnManual();
 	afx_msg void OnBnClickedBtnBrowse();
 	afx_msg void OnBnClickedBtnCheck();
+	afx_msg void OnEnChangeEditMaxcount();
+	afx_msg void OnEnChangeEditInterval();
+	afx_msg void OnBnClickedBtnCapPrev();
+	afx_msg void OnBnClickedBtnCapNext();
+	afx_msg void OnCbnSelchangeComboCapSize();
 	afx_msg LRESULT OnFinderPicked(WPARAM wParam, LPARAM lParam);
 	DECLARE_MESSAGE_MAP()
 
@@ -68,6 +73,12 @@ private:
 
 	int  GetMaxCount();
 
+	void InitCapPageSizeCombo();
+	void RefreshCapPage();
+	void GotoCapPage(int nPage);
+	void UpdateCapPageInfo();
+	int  CapLocalToGlobal(int nLocalIndex) const;
+
 	HWND            m_hwndTarget;   
 	bool            m_bAuto;        
 	int             m_nSaved;       
@@ -75,6 +86,12 @@ private:
 	CString         m_strState;     
 	CString         m_strSaveDir;   
 	CStringArray    m_arrCaptures;  
+
+	int             m_nCurCapture;   
+	int             m_nPageSize;     
+	int             m_nCurPage;      
+	bool            m_bLoading;      
+	static const int kCapPageSizes[4];
 
 	CFinderStatic   m_wndFinder;    
 	CPreviewStatic  m_wndPreview;   

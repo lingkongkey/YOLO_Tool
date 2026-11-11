@@ -49,6 +49,7 @@
 #define IDC_LBL_SAVE_DIR                1124
 #define IDC_GRP_PREVIEW                 1125
 #define IDC_GRP_CLASSES                 1126
+#define IDC_GRP_SNAP2                   1126
 #define IDC_GRP_ANNOTATE                1127
 #define IDC_LBL_WEIGHTS_ANN             1128
 #define IDC_LBL_CONF                    1129
@@ -113,6 +114,10 @@
 #define IDC_LBL_MAXCOUNT                1195
 #define IDC_EDIT_MAXCOUNT               1196
 #define IDC_SPIN_MAXCOUNT               1197
+#define IDC_BTN_CAP_PREV                1198
+#define IDC_BTN_CAP_NEXT                1199
+#define IDC_COMBO_CAP_SIZE              1200
+#define IDC_STATIC_CAP_PAGE             1201
 
 // Next default values for new objects
 // 
@@ -120,7 +125,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        205
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1198
+#define _APS_NEXT_CONTROL_VALUE         1202
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

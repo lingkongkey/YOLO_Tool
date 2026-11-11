@@ -23,6 +23,10 @@ public:
 	// ===== Test page =====
 	CString strTestModel;
 
+	// ===== Capture page =====
+	CString strCaptureInterval;
+	CString strCaptureLimit;
+
 	// ===== UI =====
 	CString strCloseAction;
 

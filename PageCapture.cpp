@@ -29,11 +29,20 @@ static const double DIFF_MEAN_THRESHOLD  = 1.5;
 #endif
 
 
+const int CPageCapture::kCapPageSizes[4] = { 50, 100, 200, 500 };
+
 CPageCapture::CPageCapture(CWnd* pParent /*=nullptr*/)
 {
 	CDialogEx(IDD_PAGE_CAPTURE, pParent);
 
-
+	m_hwndTarget = NULL;
+	m_bAuto      = false;
+	m_nSaved     = 0;
+	m_nDirCount  = 0;
+	m_nCurCapture = -1;
+	m_nPageSize   = kCapPageSizes[0];
+	m_nCurPage    = 0;
+	m_bLoading    = true;
 }
 
 void CPageCapture::DoDataExchange(CDataExchange* pDX)
@@ -52,6 +61,11 @@ BEGIN_MESSAGE_MAP(CPageCapture, CDialogEx)
 	ON_BN_CLICKED(IDC_BTN_BROWSE, &CPageCapture::OnBnClickedBtnBrowse)
 	ON_BN_CLICKED(IDC_BTN_CHECK, &CPageCapture::OnBnClickedBtnCheck)
 	ON_LBN_SELCHANGE(IDC_LIST_CAPTURES, &CPageCapture::OnLbnSelchangeListCaptures)
+	ON_EN_CHANGE(IDC_EDIT_MAXCOUNT, &CPageCapture::OnEnChangeEditMaxcount)
+	ON_EN_CHANGE(IDC_EDIT_INTERVAL, &CPageCapture::OnEnChangeEditInterval)
+	ON_BN_CLICKED(IDC_BTN_CAP_PREV, &CPageCapture::OnBnClickedBtnCapPrev)
+	ON_BN_CLICKED(IDC_BTN_CAP_NEXT, &CPageCapture::OnBnClickedBtnCapNext)
+	ON_CBN_SELCHANGE(IDC_COMBO_CAP_SIZE, &CPageCapture::OnCbnSelchangeComboCapSize)
 	ON_MESSAGE(WM_FINDER_PICKED, &CPageCapture::OnFinderPicked)
 	ON_WM_HELPINFO()
 END_MESSAGE_MAP()
@@ -69,12 +83,22 @@ BOOL CPageCapture::OnInitDialog()
 	if (pSpinMax != NULL)
 		pSpinMax->SetRange32(0, 1000000);
 
-	SetDlgItemText(IDC_EDIT_INTERVAL, _T("1000"));
-	SetDlgItemText(IDC_EDIT_MAXCOUNT, _T("1000"));
+	CString strInterval = CAppConfig::Instance().strCaptureInterval;
+	CString strLimit    = CAppConfig::Instance().strCaptureLimit;
+	if (strInterval.IsEmpty())
+		strInterval = _T("1000");
+	if (strLimit.IsEmpty())
+		strLimit = _T("1000");
+
+	SetDlgItemText(IDC_EDIT_INTERVAL, strInterval);
+	SetDlgItemText(IDC_EDIT_MAXCOUNT, strLimit);
 	CheckDlgButton(IDC_CHK_CLIENT, BST_CHECKED);
 
 	m_strSaveDir = GetDefaultSaveDir();
 	SetDlgItemText(IDC_EDIT_SAVE_DIR, m_strSaveDir);
+
+	InitCapPageSizeCombo();
+	m_bLoading = false;
 
 	RefreshDirCount();
 	UpdateStatus(_T("就绪"));
@@ -95,9 +119,35 @@ void CPageCapture::OnSize(UINT nType, int cx, int cy)
 		p->GetWindowRect(&rcCtrl);       
 		ScreenToClient(&rcCtrl);         
 		CRect rcNew = rcCtrl;
-		rcNew.bottom = cy - 10;  
+		rcNew.bottom = cy - 58;  
 		//rcNew.right = cx - 10;
 		p->MoveWindow(&rcNew);
+
+		long cyy = 50;
+		CWnd* pNav = GetDlgItem(IDC_BTN_CAP_PREV);
+		if (pNav != NULL)
+		{
+			CRect rc; pNav->GetWindowRect(&rc); ScreenToClient(&rc);
+			pNav->MoveWindow(rc.left, cy - cyy, rc.Width(), rc.Height());
+		}
+		pNav = GetDlgItem(IDC_COMBO_CAP_SIZE);
+		if (pNav != NULL)
+		{
+			CRect rc; pNav->GetWindowRect(&rc); ScreenToClient(&rc);
+			pNav->MoveWindow(rc.left, cy - cyy, rc.Width(), 120);
+		}
+		pNav = GetDlgItem(IDC_BTN_CAP_NEXT);
+		if (pNav != NULL)
+		{
+			CRect rc; pNav->GetWindowRect(&rc); ScreenToClient(&rc);
+			pNav->MoveWindow(rc.left, cy - cyy, rc.Width(), rc.Height());
+		}
+		pNav = GetDlgItem(IDC_STATIC_CAP_PAGE);
+		if (pNav != NULL)
+		{
+			CRect rc; pNav->GetWindowRect(&rc); ScreenToClient(&rc);
+			pNav->MoveWindow(rc.left, cy - 23, rc.Width(), rc.Height());
+		}
 
 
 		p = (CListBox*)GetDlgItem(IDC_GRP_PREVIEW);
@@ -537,6 +587,31 @@ CString CPageCapture::GetDefaultSaveDir()
 }
 
 
+void CPageCapture::OnEnChangeEditMaxcount()
+{
+	if (m_bLoading)
+		return;
+
+	CString strText;
+	GetDlgItemText(IDC_EDIT_MAXCOUNT, strText);
+	strText.Trim();
+	CAppConfig::Instance().strCaptureLimit = strText;
+
+	// 上限改动后立即刷新状态栏的 已用/上限
+	UpdateStatus(m_strState);
+}
+
+void CPageCapture::OnEnChangeEditInterval()
+{
+	if (m_bLoading)
+		return;
+
+	CString strText;
+	GetDlgItemText(IDC_EDIT_INTERVAL, strText);
+	strText.Trim();
+	CAppConfig::Instance().strCaptureInterval = strText;
+}
+
 void CPageCapture::OnBnClickedBtnAuto()
 {
 	if (m_bAuto)
@@ -693,10 +768,9 @@ void CPageCapture::FillCaptureList()
 	GetDlgItemText(IDC_EDIT_SAVE_DIR, m_strSaveDir);
 	m_strSaveDir.Trim();
 
-    CString strKeep;
-	int nOld = pList->GetCurSel();
-	if (nOld >= 0 && nOld < m_arrCaptures.GetSize())
-		strKeep = m_arrCaptures[nOld];
+	CString strKeep;
+	if (m_nCurCapture >= 0 && m_nCurCapture < m_arrCaptures.GetSize())
+		strKeep = m_arrCaptures[m_nCurCapture];
 
 	CStringArray arrFiles;
 	if (!m_strSaveDir.IsEmpty() && ::PathIsDirectory(m_strSaveDir))
@@ -712,14 +786,9 @@ void CPageCapture::FillCaptureList()
 		finder.Close();
 	}
 
-	pList->ResetContent();
 	m_arrCaptures.RemoveAll();
-
 	for (INT_PTR i = arrFiles.GetSize() - 1; i >= 0; i--)
-	{
-		pList->AddString(arrFiles[i]);
 		m_arrCaptures.Add(m_strSaveDir + _T("\\") + arrFiles[i]);
-	}
 
 	int nSel = -1;
 	if (!strKeep.IsEmpty())
@@ -733,14 +802,152 @@ void CPageCapture::FillCaptureList()
 			}
 		}
 	}
-	if (nSel < 0 && pList->GetCount() > 0)
+	if (nSel < 0 && m_arrCaptures.GetSize() > 0)
 		nSel = 0;
 
-	if (nSel >= 0)
+	m_nCurCapture = nSel;
+	int nSize = m_nPageSize > 0 ? m_nPageSize : kCapPageSizes[0];
+	m_nCurPage = (nSel >= 0) ? nSel / nSize : 0;
+
+	RefreshCapPage();
+	UpdateCapPageInfo();
+}
+
+void CPageCapture::InitCapPageSizeCombo()
+{
+	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_CAP_SIZE);
+	if (pCombo == NULL)
+		return;
+
+	pCombo->ResetContent();
+	int iSel = 0;
+	for (int i = 0; i < 4; i++)
 	{
-		pList->SetCurSel(nSel);
-		LoadPreviewAt(nSel);
+		CString str;
+		str.Format(_T("%d"), kCapPageSizes[i]);
+		int nIdx = pCombo->AddString(str);
+		if (kCapPageSizes[i] == m_nPageSize)
+			iSel = nIdx;
 	}
+	pCombo->SetCurSel(iSel);
+	m_nPageSize = kCapPageSizes[iSel];
+}
+
+int CPageCapture::CapLocalToGlobal(int nLocalIndex) const
+{
+	if (nLocalIndex < 0)
+		return -1;
+
+	int nIndex = m_nCurPage * m_nPageSize + nLocalIndex;
+	if (nIndex < 0 || nIndex >= m_arrCaptures.GetSize())
+		return -1;
+	return nIndex;
+}
+
+void CPageCapture::RefreshCapPage()
+{
+	CListBox* pList = (CListBox*)GetDlgItem(IDC_LIST_CAPTURES);
+	if (pList == NULL)
+		return;
+
+	pList->ResetContent();
+
+	int nTotal = (int)m_arrCaptures.GetSize();
+	if (nTotal <= 0)
+		return;
+
+	int nSize = m_nPageSize > 0 ? m_nPageSize : kCapPageSizes[0];
+	int nStart = m_nCurPage * nSize;
+	int nEnd = nStart + nSize;
+	if (nEnd > nTotal)
+		nEnd = nTotal;
+
+	for (int i = nStart; i < nEnd; i++)
+	{
+		TCHAR szName[MAX_PATH] = { 0 };
+		_tcsncpy_s(szName, m_arrCaptures[i], _TRUNCATE);
+		::PathStripPath(szName);
+		pList->AddString(szName);
+	}
+
+	if (m_nCurCapture >= nStart && m_nCurCapture < nEnd)
+	{
+		int nLocal = m_nCurCapture - nStart;
+		pList->SetCurSel(nLocal);
+		pList->SetTopIndex(nLocal);
+		LoadPreviewAt(m_nCurCapture);
+	}
+}
+
+void CPageCapture::GotoCapPage(int nPage)
+{
+	int nTotal = (int)m_arrCaptures.GetSize();
+	int nSize = m_nPageSize > 0 ? m_nPageSize : kCapPageSizes[0];
+	int nPages = (nTotal > 0) ? (nTotal + nSize - 1) / nSize : 1;
+
+	if (nPage < 0)
+		nPage = 0;
+	if (nPage >= nPages)
+		nPage = nPages - 1;
+
+	m_nCurPage = nPage;
+	RefreshCapPage();
+	UpdateCapPageInfo();
+}
+
+void CPageCapture::UpdateCapPageInfo()
+{
+	int nTotal = (int)m_arrCaptures.GetSize();
+	int nSize = m_nPageSize > 0 ? m_nPageSize : kCapPageSizes[0];
+
+	CString str;
+	int nPages = 0;
+	if (nTotal <= 0)
+	{
+		str = _T("0 张");
+	}
+	else
+	{
+		nPages = (nTotal + nSize - 1) / nSize;
+		int nStart = m_nCurPage * nSize + 1;
+		int nEnd = nStart + nSize - 1;
+		if (nEnd > nTotal)
+			nEnd = nTotal;
+		str.Format(_T("第%d页（%d-%d）/%d张 %d页"), m_nCurPage + 1, nStart, nEnd, nTotal, nPages);
+	}
+	SetDlgItemText(IDC_STATIC_CAP_PAGE, str);
+
+	GetDlgItem(IDC_BTN_CAP_PREV)->EnableWindow(m_nCurPage > 0);
+	GetDlgItem(IDC_BTN_CAP_NEXT)->EnableWindow(nPages > 0 && m_nCurPage + 1 < nPages);
+}
+
+void CPageCapture::OnBnClickedBtnCapPrev()
+{
+	GotoCapPage(m_nCurPage - 1);
+}
+
+void CPageCapture::OnBnClickedBtnCapNext()
+{
+	GotoCapPage(m_nCurPage + 1);
+}
+
+void CPageCapture::OnCbnSelchangeComboCapSize()
+{
+	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_CAP_SIZE);
+	if (pCombo == NULL)
+		return;
+
+	int nSel = pCombo->GetCurSel();
+	if (nSel < 0 || nSel >= 4)
+		return;
+
+	
+	int nGlobal = m_nCurCapture;
+	m_nPageSize = kCapPageSizes[nSel];
+	m_nCurPage = (nGlobal >= 0) ? nGlobal / m_nPageSize : 0;
+
+	RefreshCapPage();
+	UpdateCapPageInfo();
 }
 
 bool CPageCapture::LoadPreviewAt(int nIndex)
@@ -763,8 +970,15 @@ void CPageCapture::OnLbnSelchangeListCaptures()
 		return;
 
 	int nSel = pList->GetCurSel();
-	if (nSel >= 0)
-		LoadPreviewAt(nSel);
+	if (nSel < 0)
+		return;
+
+	int nGlobal = CapLocalToGlobal(nSel);
+	if (nGlobal < 0)
+		return;
+
+	m_nCurCapture = nGlobal;
+	LoadPreviewAt(nGlobal);
 }
 
 void CPageCapture::ShowCaptureMenu(int x, int y)
@@ -773,8 +987,8 @@ void CPageCapture::ShowCaptureMenu(int x, int y)
 	if (pList == NULL)
 		return;
 
-	int nSel = pList->GetCurSel();
-	if (nSel < 0 || nSel >= m_arrCaptures.GetSize())
+	int nSel = CapLocalToGlobal(pList->GetCurSel());
+	if (nSel < 0)
 		return;
 
 	CMenu menu;
