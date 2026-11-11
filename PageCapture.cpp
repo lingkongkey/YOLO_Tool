@@ -65,7 +65,12 @@ BOOL CPageCapture::OnInitDialog()
 	if (pSpin != NULL)
 		pSpin->SetRange32(100, 600000);
 
+	CSpinButtonCtrl* pSpinMax = (CSpinButtonCtrl*)GetDlgItem(IDC_SPIN_MAXCOUNT);
+	if (pSpinMax != NULL)
+		pSpinMax->SetRange32(0, 1000000);
+
 	SetDlgItemText(IDC_EDIT_INTERVAL, _T("1000"));
+	SetDlgItemText(IDC_EDIT_MAXCOUNT, _T("1000"));
 	CheckDlgButton(IDC_CHK_CLIENT, BST_CHECKED);
 
 	m_strSaveDir = GetDefaultSaveDir();
@@ -338,6 +343,22 @@ bool CPageCapture::CaptureOnce()
 
 	bool bClientOnly = (IsDlgButtonChecked(IDC_CHK_CLIENT) == BST_CHECKED);
 
+	// 张数限制：按项目照片总数（保存目录中的图片数量）计算
+	if (m_bAuto)
+	{
+		RefreshDirCount();
+		int nLimit = GetMaxCount();
+		if (nLimit > 0 && m_nDirCount >= nLimit)
+		{
+			StopAuto();
+			CString strMsg;
+			strMsg.Format(_T("项目照片已达上限 %d 张（当前 %d 张），自动截图已停止。"),
+				nLimit, m_nDirCount);
+			AfxMessageBox(strMsg, MB_ICONINFORMATION);
+			return false;
+		}
+	}
+
 	CImage image;
 	if (!CaptureWindowToImage(m_hwndTarget, bClientOnly, image))
 	{
@@ -380,6 +401,7 @@ bool CPageCapture::CaptureOnce()
 	m_imgPrevThumb.Attach(thumb.Detach());
 	m_wndPreview.SetImage(&image);
 	FillCaptureList();
+	RefreshDirCount();
 	UpdateStatus(m_bAuto ? _T("自动截图中") : _T("就绪"));
 	return true;
 }
@@ -388,6 +410,17 @@ void CPageCapture::StartAuto()
 {
 	if (!ValidateTarget(true))
 		return;
+
+	RefreshDirCount();
+	int nLimit = GetMaxCount();
+	if (nLimit > 0 && m_nDirCount >= nLimit)
+	{
+		CString strMsg;
+		strMsg.Format(_T("项目照片已达上限 %d 张（当前 %d 张），无法开始自动截图。\r\n")
+			_T("如需继续，请调大上限或清理已有照片。"), nLimit, m_nDirCount);
+		AfxMessageBox(strMsg, MB_ICONINFORMATION);
+		return;
+	}
 
 		CString strInterval;
 	GetDlgItemText(IDC_EDIT_INTERVAL, strInterval);
@@ -425,6 +458,8 @@ void CPageCapture::SetUiIdle(bool bIdle)
 	GetDlgItem(IDC_FINDER)->EnableWindow(bEnable);
 	GetDlgItem(IDC_EDIT_INTERVAL)->EnableWindow(bEnable);
 	GetDlgItem(IDC_SPIN_INTERVAL)->EnableWindow(bEnable);
+	GetDlgItem(IDC_EDIT_MAXCOUNT)->EnableWindow(bEnable);
+	GetDlgItem(IDC_SPIN_MAXCOUNT)->EnableWindow(bEnable);
 	GetDlgItem(IDC_EDIT_SAVE_DIR)->EnableWindow(bEnable);
 	GetDlgItem(IDC_BTN_BROWSE)->EnableWindow(bEnable);
 	GetDlgItem(IDC_CHK_CLIENT)->EnableWindow(bEnable);
@@ -433,10 +468,28 @@ void CPageCapture::SetUiIdle(bool bIdle)
 void CPageCapture::UpdateStatus(LPCTSTR lpszState)
 {
 	m_strState = lpszState;
+
+	CString strImages;
+	int nLimit = GetMaxCount();
+	if (nLimit > 0)
+		strImages.Format(_T("%d/%d"), m_nDirCount, nLimit);
+	else
+		strImages.Format(_T("%d/不限"), m_nDirCount);
+
 	CString str;
-	str.Format(_T("Status: %s     Saved: %d     Images: %d"),
-		lpszState, m_nSaved, m_nDirCount);
+	str.Format(_T("Status: %s     Saved: %d     Images: %s"),
+		lpszState, m_nSaved, (LPCTSTR)strImages);
 	SetDlgItemText(IDC_STATIC_STATUS, str);
+}
+
+int CPageCapture::GetMaxCount()
+{
+	CString strText;
+	GetDlgItemText(IDC_EDIT_MAXCOUNT, strText);
+	strText.Trim();
+
+	int nLimit = _ttoi(strText);
+	return nLimit < 0 ? 0 : nLimit;
 }
 
 
@@ -449,15 +502,19 @@ void CPageCapture::RefreshDirCount()
 	int nCount = 0;
 	if (!strDir.IsEmpty() && ::PathIsDirectory(strDir))
 	{
-		CFileFind finder;
-		BOOL bMore = finder.FindFile(strDir + _T("\\*.jpg"));
-		while (bMore)
+		const TCHAR* szExts[] = { _T("*.jpg"), _T("*.jpeg"), _T("*.png"), _T("*.bmp") };
+		for (int k = 0; k < 4; k++)
 		{
-			bMore = finder.FindNextFile();
-			if (!finder.IsDirectory())
-				nCount++;
+			CFileFind finder;
+			BOOL bMore = finder.FindFile(strDir + _T("\\") + szExts[k]);
+			while (bMore)
+			{
+				bMore = finder.FindNextFile();
+				if (!finder.IsDirectory())
+					nCount++;
+			}
+			finder.Close();
 		}
-		finder.Close();
 	}
 
 	if (nCount != m_nDirCount)

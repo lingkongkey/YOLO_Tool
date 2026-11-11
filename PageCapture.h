@@ -66,6 +66,8 @@ private:
 	
 	void ShowCaptureMenu(int x, int y);
 
+	int  GetMaxCount();
+
 	HWND            m_hwndTarget;   
 	bool            m_bAuto;        
 	int             m_nSaved;       
