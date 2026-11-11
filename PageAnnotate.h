@@ -56,6 +56,9 @@ protected:
 	afx_msg void OnBnClickedBtnZoomFit();
 	afx_msg void OnBnClickedBtnSaveLabels();
 	afx_msg void OnBnClickedBtnDelBox();
+	afx_msg void OnBnClickedBtnPagePrev();
+	afx_msg void OnBnClickedBtnPageNext();
+	afx_msg void OnCbnSelchangeComboPageSize();
 	afx_msg void OnLbnSelchangeListImages();
 	afx_msg void OnCbnSelchangeComboClasses();
 	afx_msg LRESULT OnAnnoChanged(WPARAM wParam, LPARAM lParam);
@@ -64,7 +67,7 @@ protected:
 	afx_msg LRESULT OnAiResult(WPARAM wParam, LPARAM lParam);
 	DECLARE_MESSAGE_MAP()
 
-private:
+	public:
 	
 	void FillWeightsCombo();
 
@@ -76,7 +79,15 @@ private:
 	//
 	void FillImageList();
 	//
+	void RefreshPage();
+	void GotoPage(int nPage);
+	//
 	void ShowListMenu(int x, int y);
+
+	int  LocalToGlobal(int nLocalIndex) const;
+	int  GlobalToLocal(int nGlobalIndex) const;
+	void UpdatePageInfo();
+	void InitPageSizeCombo();
 
 	bool LoadImageAt(int nIndex, bool bKeepListSelection = false);
 	
@@ -112,6 +123,11 @@ private:
 	CProcessLogCapture m_capture;
 	CStringArray    m_arrImages;   
 	int             m_nCurImage;
+
+	int             m_nPageSize = 50;        // 每页数量
+	int             m_nCurPage = 0;          // 当前页（0 基）
+	int             m_nTotalImages = 0;      // 图片总数
+	static const int kPageSizes[4];
 
 	bool            m_bAiRunning = false;      
 	bool            m_bAiStop = false;         

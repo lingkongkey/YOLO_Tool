@@ -8,7 +8,7 @@
 #include "UiUtil.h"
 #include "AppConfig.h"
 #include "afxdialogex.h"
-
+#include "PageAnnotate.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -20,7 +20,7 @@
 #define IDM_TRAY_EXIT        40002
 #define TRAY_ICON_ID         1
 
-
+extern CPageAnnotate* g_CPagethis;
 
 class CCloseChoiceDlg : public CDialogEx
 {
@@ -206,6 +206,10 @@ void CYOLOToolDlg::ShowPage(int nPage)
 	m_pageTrain.ShowWindow(nPage == 2 ? SW_SHOW : SW_HIDE);
 	m_pageTest.ShowWindow(nPage == 3 ? SW_SHOW : SW_HIDE);
 	m_nCurPage = nPage;
+	if (nPage==1)
+	{
+		g_CPagethis->FillImageList();
+	}
 }
 
 void CYOLOToolDlg::OnTcnSelchangeTab(NMHDR* /*pNMHDR*/, LRESULT* pResult)

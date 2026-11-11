@@ -15,6 +15,7 @@
 #include <memory>
 #pragma comment(lib, "shlwapi.lib")
 
+CPageAnnotate* g_CPagethis=NULL;
 
 extern std::vector<char> HttpPost(const std::wstring& wstrUrl, const char* pUtf8Body, DWORD dwBodyLen, const std::wstring& wstrAuthHeader, DWORD& dwCode);
 extern std::string ImageToJpegBase64(LPCTSTR szPath, LONG nMaxLongSide , ULONG nQuality);
@@ -47,6 +48,9 @@ BEGIN_MESSAGE_MAP(CPageAnnotate, CDialogEx)
 	ON_BN_CLICKED(IDC_BTN_ZOOM_FIT, &CPageAnnotate::OnBnClickedBtnZoomFit)
 	ON_BN_CLICKED(IDC_BTN_SAVE_LABELS, &CPageAnnotate::OnBnClickedBtnSaveLabels)
 	ON_BN_CLICKED(IDC_BTN_DEL_BOX, &CPageAnnotate::OnBnClickedBtnDelBox)
+	ON_BN_CLICKED(IDC_BTN_PAGE_PREV, &CPageAnnotate::OnBnClickedBtnPagePrev)
+	ON_BN_CLICKED(IDC_BTN_PAGE_NEXT, &CPageAnnotate::OnBnClickedBtnPageNext)
+	ON_CBN_SELCHANGE(IDC_COMBO_PAGE_SIZE, &CPageAnnotate::OnCbnSelchangeComboPageSize)
 	ON_LBN_SELCHANGE(IDC_LIST_IMAGES, &CPageAnnotate::OnLbnSelchangeListImages)
 	ON_CBN_SELCHANGE(IDC_COMBO_CLASSES, &CPageAnnotate::OnCbnSelchangeComboClasses)
 	ON_MESSAGE(WM_ANNO_CHANGED, &CPageAnnotate::OnAnnoChanged)
@@ -57,6 +61,8 @@ BEGIN_MESSAGE_MAP(CPageAnnotate, CDialogEx)
 	ON_WM_HELPINFO()
 	ON_WM_CTLCOLOR()
 END_MESSAGE_MAP()
+
+const int CPageAnnotate::kPageSizes[4] = { 25, 50, 100, 200 };
 
 static bool ReadUtf8File(const CString& strPath, CString& strText)
 {
@@ -647,6 +653,7 @@ BOOL CPageAnnotate::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
 
+	g_CPagethis = this;
 	CEdit* p = (CEdit *) GetDlgItem(IDC_EDIT_AI_KEY);
 	g_apikey = p->m_hWnd;
 	p = (CEdit*)GetDlgItem(IDC_EDIT_AI_MODEL);
@@ -715,6 +722,7 @@ BOOL CPageAnnotate::OnInitDialog()
 	m_canvas.Create(this, IDC_ANNO_CANVAS);
 
 	FillClassCombo();
+	InitPageSizeCombo();
 	FillImageList();
 	Layout();
 	UpdateAnnoStatus();
@@ -933,7 +941,7 @@ void CPageAnnotate::Layout()
 				max(1, ::MulDiv(w, dpi, 96)), max(1, ::MulDiv(h, dpi, 96)));
 	};
 
-	const int M = 8, GAP = 8, LEFTW = 160, RIGHTW = 200, BARH = 22, TOOLH = 32;
+	const int M = 8, GAP = 8, LEFTW = 190, RIGHTW = 200, BARH = 22, TOOLH = 32;
 	const int AIH = 26;
 	int barY = H - M - BARH;
 	int colH = barY - GAP - M;
@@ -944,12 +952,16 @@ void CPageAnnotate::Layout()
 		centerW = 240;
 
 	mv(IDC_GRP_IMAGES, M, M, LEFTW, colH);
-	mv(IDC_LIST_IMAGES, M + 8, M + 20, LEFTW - 16, colH - 20 - 8 - 30 - 8);
+	mv(IDC_LIST_IMAGES, M + 8, M + 20, LEFTW - 16, colH - 20 - 8 - 30 - 16);
 	int bw = (LEFTW - 16 - 12) / 3;
 	int by = M + colH - 8 - 26;
-	mv(IDC_BTN_PREV, M + 8, by, bw, 26);
-	mv(IDC_BTN_NEXT, M + 14 + bw, by, bw, 26);
-	mv(IDC_BTN_REFRESH, M + 20 + bw * 2, by, bw, 26);
+
+	mv(IDC_BTN_PAGE_PREV, M + 5, by - 16, bw, 26);
+	mv(IDC_BTN_PAGE_NEXT, M + 20 + bw * 1-5, by - 16, bw, 26);
+	mv(IDC_COMBO_PAGE_SIZE, M + 20 + bw * 2, by - 16, bw, 100);
+	
+	mv(IDC_STATIC_PAGE_INFO, M + 20 + bw * 0, by+10, bw+100, 15);
+	
 
 	mv(IDC_LBL_AI_KEY, centerX, M + 5, 40, 14);
 	mv(IDC_EDIT_AI_KEY, centerX + 42, M, 350, 22);
@@ -996,11 +1008,11 @@ void CPageAnnotate::Layout()
 
 void CPageAnnotate::FillImageList()
 {
-	CListBox* pList = (CListBox*)GetDlgItem(IDC_LIST_IMAGES);
-	if (pList == NULL)
-		return;
+	// 重新扫描时保留当前图片（切页签会触发本函数），避免跳回第一张
+	CString strKeep;
+	if (m_nCurImage >= 0 && m_nCurImage < m_arrImages.GetSize())
+		strKeep = m_arrImages[m_nCurImage];
 
-	pList->ResetContent();
 	m_arrImages.RemoveAll();
 	m_nCurImage = -1;
 
@@ -1016,13 +1028,193 @@ void CPageAnnotate::FillImageList()
 			if (finder.IsDirectory())
 				continue;
 			m_arrImages.Add(finder.GetFilePath());
-			pList->AddString(finder.GetFileName());
 		}
 		finder.Close();
 	}
 
-	if (pList->GetCount() > 0)
-		LoadImageAt(0);
+	m_nTotalImages = m_arrImages.GetSize();
+
+	int nKeepIdx = -1;
+	if (!strKeep.IsEmpty())
+	{
+		for (int i = 0; i < m_nTotalImages; i++)
+		{
+			if (m_arrImages[i].CompareNoCase(strKeep) == 0)
+			{
+				nKeepIdx = i;
+				break;
+			}
+		}
+	}
+
+	int nPageSize = m_nPageSize > 0 ? m_nPageSize : 50;
+	if (nKeepIdx >= 0)
+	{
+		m_nCurPage = nKeepIdx / nPageSize;
+		m_nCurImage = nKeepIdx;
+	}
+	else
+	{
+		m_nCurPage = 0;
+		if (m_nTotalImages > 0)
+			LoadImageAt(0);
+	}
+
+	RefreshPage();
+	UpdatePageInfo();
+}
+
+void CPageAnnotate::InitPageSizeCombo()
+{
+	CComboBox* pCmb = (CComboBox*)GetDlgItem(IDC_COMBO_PAGE_SIZE);
+	if (pCmb == NULL)
+		return;
+
+	pCmb->ResetContent();
+	int nDefSel = 0;
+	for (int i = 0; i < 4; i++)
+	{
+		CString str;
+		str.Format(_T("%d"), kPageSizes[i]);
+		pCmb->AddString(str);
+		if (kPageSizes[i] == m_nPageSize)
+			nDefSel = i;
+	}
+	pCmb->SetCurSel(nDefSel);
+}
+
+void CPageAnnotate::RefreshPage()
+{
+	CListBox* pList = (CListBox*)GetDlgItem(IDC_LIST_IMAGES);
+	if (pList == NULL)
+		return;
+
+	pList->ResetContent();
+
+	int nTotal = m_arrImages.GetSize();
+	if (nTotal == 0)
+		return;
+
+	int nPageSize = m_nPageSize > 0 ? m_nPageSize : 50;
+	int nStart = m_nCurPage * nPageSize;
+	int nEnd = nStart + nPageSize;
+	if (nEnd > nTotal)
+		nEnd = nTotal;
+
+	int nKeepLocal = -1;
+	if (m_nCurImage >= nStart && m_nCurImage < nEnd)
+		nKeepLocal = m_nCurImage - nStart;
+
+	for (int i = nStart; i < nEnd; i++)
+	{
+		CString strPath = m_arrImages[i];
+		TCHAR szName[MAX_PATH] = { 0 };
+		_tcsncpy_s(szName, strPath, _TRUNCATE);
+		::PathStripPath(szName);
+		pList->AddString(szName);
+	}
+
+	if (nKeepLocal >= 0 && nKeepLocal < pList->GetCount())
+	{
+		pList->SetCurSel(nKeepLocal);
+		pList->SetTopIndex(nKeepLocal);
+	}
+}
+
+void CPageAnnotate::GotoPage(int nPage)
+{
+	int nPages = 1;
+	if (m_nPageSize > 0 && m_arrImages.GetSize() > 0)
+		nPages = (m_arrImages.GetSize() + m_nPageSize - 1) / m_nPageSize;
+	if (nPage < 0) nPage = 0;
+	if (nPage >= nPages) nPage = nPages - 1;
+	if (nPage < 0) nPage = 0;
+
+	m_nCurPage = nPage;
+	RefreshPage();
+	UpdatePageInfo();
+}
+
+int CPageAnnotate::LocalToGlobal(int nLocalIndex) const
+{
+	if (nLocalIndex < 0) return -1;
+	int g = m_nCurPage * m_nPageSize + nLocalIndex;
+	if (g >= m_arrImages.GetSize()) return -1;
+	return g;
+}
+
+int CPageAnnotate::GlobalToLocal(int nGlobalIndex) const
+{
+	if (nGlobalIndex < 0) return -1;
+	int g = m_nCurPage * m_nPageSize;
+	if (nGlobalIndex < g) return -1;
+	if (nGlobalIndex >= g + m_nPageSize) return -1;
+	return nGlobalIndex - g;
+}
+
+void CPageAnnotate::UpdatePageInfo()
+{
+	CString str;
+	int nTotal = m_arrImages.GetSize();
+	if (nTotal <= 0)
+	{
+		str = _T("0 张");
+	}
+	else
+	{
+		int nPageSize = m_nPageSize > 0 ? m_nPageSize : 50;
+		int nPages = (nTotal + nPageSize - 1) / nPageSize;
+		int nStart = m_nCurPage * nPageSize + 1;
+		int nEnd = nStart + nPageSize - 1;
+		if (nEnd > nTotal) nEnd = nTotal;
+		str.Format(_T("第%d页（%d-%d）/%d张 %d页"), m_nCurPage + 1, nStart, nEnd, nTotal, nPages);
+	}
+	SetDlgItemText(IDC_STATIC_PAGE_INFO, str);
+
+	CWnd* pPrev = GetDlgItem(IDC_BTN_PAGE_PREV);
+	CWnd* pNext = GetDlgItem(IDC_BTN_PAGE_NEXT);
+	if (pPrev) pPrev->EnableWindow(m_nCurPage > 0);
+	if (pNext) pNext->EnableWindow(nTotal > 0 && m_nCurPage + 1 < (nTotal + m_nPageSize - 1) / m_nPageSize);
+}
+
+void CPageAnnotate::OnBnClickedBtnPagePrev()
+{
+	GotoPage(m_nCurPage - 1);
+}
+
+void CPageAnnotate::OnBnClickedBtnPageNext()
+{
+	GotoPage(m_nCurPage + 1);
+}
+
+void CPageAnnotate::OnCbnSelchangeComboPageSize()
+{
+	CComboBox* pCmb = (CComboBox*)GetDlgItem(IDC_COMBO_PAGE_SIZE);
+	if (pCmb == NULL)
+		return;
+	int nSel = pCmb->GetCurSel();
+	if (nSel < 0 || nSel >= 4)
+		return;
+
+	int nOldSize = m_nPageSize;
+	int nOldStartLocal = m_nCurImage - m_nCurPage * nOldSize;
+	if (nOldStartLocal < 0) nOldStartLocal = 0;
+
+	m_nPageSize = kPageSizes[nSel];
+
+	if (m_nCurImage >= 0)
+	{
+		int nNewPage = m_nCurImage / m_nPageSize;
+		GotoPage(nNewPage);
+		int nLocal = m_nCurImage % m_nPageSize;
+		CListBox* pList = (CListBox*)GetDlgItem(IDC_LIST_IMAGES);
+		if (pList != NULL && nLocal < pList->GetCount())
+			pList->SetCurSel(nLocal);
+	}
+	else
+	{
+		GotoPage(0);
+	}
 }
 
 void CPageAnnotate::ShowListMenu(int x, int y)
@@ -1031,18 +1223,21 @@ void CPageAnnotate::ShowListMenu(int x, int y)
 	if (pList == NULL)
 		return;
 
-	int nCur = pList->GetCurSel();
-	if (nCur < 0 || nCur >= m_arrImages.GetSize())
+	int nCurLocal = pList->GetCurSel();
+	int nCur = LocalToGlobal(nCurLocal);
+	if (nCur < 0)
 		return;
 
 	CStringArray arrSel;
 	int nItems = pList->GetCount();
-	if (nItems > (int)m_arrImages.GetSize())
-		nItems = (int)m_arrImages.GetSize();
 	for (int i = 0; i < nItems; i++)
 	{
 		if (pList->GetSel(i) > 0)
-			arrSel.Add(m_arrImages[i]);
+		{
+			int g = LocalToGlobal(i);
+			if (g >= 0)
+				arrSel.Add(m_arrImages[g]);
+		}
 	}
 	if (arrSel.GetSize() == 0)
 		arrSel.Add(m_arrImages[nCur]);
@@ -1176,17 +1371,28 @@ bool CPageAnnotate::LoadImageAt(int nIndex, bool bKeepListSelection)
 		}
 	}
 
+	int nPageSize = m_nPageSize > 0 ? m_nPageSize : 50;
+	int nPage = nIndex / nPageSize;
+	if (nPage != m_nCurPage)
+	{
+		GotoPage(nPage);
+	}
+
 	m_nCurImage = nIndex;
 	CString strImg = m_arrImages[nIndex];
 	m_canvas.LoadImage(strImg, GetLabelPathFor(strImg));
 
+	int nLocal = nIndex - m_nCurPage * nPageSize;
 	CListBox* pList = (CListBox*)GetDlgItem(IDC_LIST_IMAGES);
 	if (pList != NULL)
 	{
+		if (nLocal >= pList->GetCount())
+			nLocal = pList->GetCount() - 1;
+		if (nLocal < 0) nLocal = 0;
 		if (bKeepListSelection)
-			pList->SetCaretIndex(nIndex);
+			pList->SetCaretIndex(nLocal);
 		else
-			pList->SetCurSel(nIndex);
+			pList->SetCurSel(nLocal);
 
 		UpdateAnnoStatus();
 		return true;
@@ -1338,16 +1544,20 @@ void CPageAnnotate::OnLbnSelchangeListImages()
 	if (nSel < 0)
 		return;
 
+	int nSelGlobal = LocalToGlobal(nSel);
+	if (nSelGlobal < 0)
+		return;
+
 	if (HasMultiSelection())
 	{
-		if (nSel != m_nCurImage)
-			LoadImageAt(nSel, true);
+		if (nSelGlobal != m_nCurImage)
+			LoadImageAt(nSelGlobal, true);
 		else
 			UpdateAnnoStatus();
 	}
-	else if (nSel != m_nCurImage)
+	else if (nSelGlobal != m_nCurImage)
 	{
-		LoadImageAt(nSel);
+		LoadImageAt(nSelGlobal);
 	}
 }
 

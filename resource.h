@@ -106,6 +106,10 @@
 #define IDC_CLOSE_TRAY                  1188
 #define IDC_CLOSE_EXIT                  1189
 #define IDC_CLOSE_NOASK                 1190
+#define IDC_BTN_PAGE_PREV               1191
+#define IDC_BTN_PAGE_NEXT               1192
+#define IDC_COMBO_PAGE_SIZE             1193
+#define IDC_STATIC_PAGE_INFO            1194
 
 // Next default values for new objects
 // 
@@ -113,7 +117,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        205
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1191
+#define _APS_NEXT_CONTROL_VALUE         1195
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
