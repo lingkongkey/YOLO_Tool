@@ -47,7 +47,7 @@ CStringArray& ProjectImages();
 
 std::vector<YOLOPT>& ProjectWeights();
 
-long& ProjectWeightIndex();
+CString GetRunWeightDisplayName(LPCTSTR lpszRunName);
 
 void ReloadProjectImages(LPCTSTR lpszDir);
 

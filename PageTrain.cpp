@@ -19,6 +19,7 @@ extern CPageAnnotate* g_CPagethis;
 CPageTrain* g_CPageTrain = NULL;
 CComboBox* g_pComboXUN = 0;
 extern CComboBox* g_pComboBIAOZHU;
+extern CComboBox* g_pComboTEST;
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -152,7 +153,6 @@ static bool LoadClassTable(std::vector<BYTE>& table)
 CPageTrain::CPageTrain(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_PAGE_TRAIN, pParent)
 	, m_ptArr(ProjectWeights())
-	, m_idxl(ProjectWeightIndex())
 	, m_bExporting(false)
 {
 }
@@ -406,25 +406,44 @@ void RefreshWeightCombos()
 {
 	std::vector<YOLOPT>& weights = ProjectWeights();
 	for (size_t i = 0; i < weights.size(); i++)
+	{
 		weights[i].ptdex = (long)i;
+	}
 
-	CComboBox* combos[] = { g_pComboXUN, g_pComboBIAOZHU };
-	for (int c = 0; c < 2; c++)
+	CComboBox* combos[] = { g_pComboXUN, g_pComboBIAOZHU, g_pComboTEST };
+	for (int c = 0; c < 3; c++)
 	{
 		CComboBox* pCombo = combos[c];
 		if (pCombo == NULL)
 			continue;
 
 		int nOldSel = pCombo->GetCurSel();
-		CString strOldSel;
-		if (nOldSel >= 0)
+		CString strOldSel, strOldPath;
+		if (pCombo == g_pComboTEST && nOldSel >= 0 && nOldSel < (int)weights.size())
+			strOldPath = weights[nOldSel].ptName;
+		else if (nOldSel >= 0)
 			pCombo->GetLBText(nOldSel, strOldSel);
 
 		pCombo->ResetContent();
 		for (size_t i = 0; i < weights.size(); i++)
+		{
 			pCombo->InsertString((int)i, weights[i].pt);
+		}
 
-		int nNewSel = pCombo->FindStringExact(-1, strOldSel);
+		int nNewSel = -1;
+		if (pCombo == g_pComboTEST && !strOldPath.IsEmpty())
+		{
+			for (size_t i = 0; i < weights.size(); i++)
+			{
+				if (weights[i].ptName.CompareNoCase(strOldPath) == 0)
+				{
+					nNewSel = (int)i;
+					break;
+				}
+			}
+		}
+		else
+			nNewSel = pCombo->FindStringExact(-1, strOldSel);
 		if (nNewSel < 0 && pCombo->GetCount() > 0)
 			nNewSel = min(max(nOldSel, 0), pCombo->GetCount() - 1);
 		pCombo->SetCurSel(nNewSel);
@@ -462,10 +481,9 @@ void CPageTrain::GetPtPath()
 			if (finderCheck.FindFile(strPath) && !IsPt(m_ptArr, strPath))
 			{
 				YOLOPT t_p;
-				t_p.pt.Format(_T("%d--best.pt"), m_idxl);
+				t_p.pt = GetRunWeightDisplayName(finder.GetFileName());
 				t_p.ptName = strPath;
 				t_p.ptdex = (long)m_ptArr.size();
-				m_idxl++;
 				m_ptArr.push_back(t_p);
 			}
 			finderCheck.Close();
@@ -510,7 +528,7 @@ void CPageTrain::FillWeightsCombo()
 					}
 					YOLOPT t_p;
 					t_p.pt = finder.GetFileName();
-					t_p.ptName = arrDirs[d] + "\\" + t_p.pt;
+					t_p.ptName = arrDirs[d] + "\\" + finder.GetFileName();
 					t_p.ptdex = idx;
 					pCombo->InsertString(t_p.ptdex, finder.GetFileName());
 					idx += 1;
@@ -601,7 +619,7 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 
 	// Weights: dropdown shows file names (e.g. yolo11n.pt or train-3/best.pt)
 
-	
+
 
 	bool bResume = (IsDlgButtonChecked(IDC_CHK_RESUME) == BST_CHECKED);
 
@@ -679,7 +697,6 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 				finderCheck.Close();
 				IsTestPt();
 				AppendLog(_T("该pt权重文件已经被删除"));
-				m_idxl--;
 				return;
 			}
 		}
@@ -689,7 +706,7 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 			finderCheck.Close();
 			IsTestPt();
 			AppendLog(_T("该pt权重文件已经被删除"));
-			m_idxl--;
+
 			return;
 
 		}

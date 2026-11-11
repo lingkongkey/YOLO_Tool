@@ -53,7 +53,6 @@ public:
 
 	void GetPtPath();
 	std::vector<YOLOPT>&  m_ptArr;
-	long&                 m_idxl;
 
 	int m_nLastEpochsDefault = 0;
 

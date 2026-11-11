@@ -37,7 +37,6 @@ CPageAnnotate::CPageAnnotate(CWnd* pParent /*=nullptr*/)
 	, m_arrImages(ProjectImages())
 	, m_nCurImage(-1)
 	, m_ptArr(ProjectWeights())
-	, m_idxl(ProjectWeightIndex())
 {
 }
 
@@ -2006,7 +2005,6 @@ void CPageAnnotate::OnBnClickedBtnAnnotate()
 			finderCheck.Close();
 			IsTestPt();
 			AfxMessageBox(_T("该pt权重文件已经被删除"), MB_ICONWARNING);
-			m_idxl--;
 			return;
 		}
 	}
@@ -2016,7 +2014,7 @@ void CPageAnnotate::OnBnClickedBtnAnnotate()
 		finderCheck.Close();
 		IsTestPt();
 		AfxMessageBox(_T("该pt权重文件已经被删除"), MB_ICONWARNING);
-		m_idxl--;
+		
 		return;
 
 	}
@@ -2562,12 +2560,11 @@ void CPageAnnotate::GetPtPath()
 					continue;
 				}
 				YOLOPT t_p;
-				t_p.pt.Format(L"%d--best.pt", m_idxl);
+				t_p.pt = GetRunWeightDisplayName(finder.GetFileName());
 				t_p.ptName = strName;
 				t_p.ptdex = (long)m_ptArr.size();
 				pCombo->InsertString(t_p.ptdex, t_p.pt);
 				idx += 1;
-				m_idxl += 1;
 				m_ptArr.push_back(t_p);
 			}
 			finderCheck.Close();

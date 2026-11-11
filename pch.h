@@ -11,7 +11,10 @@ typedef struct _YOLOPT  //
 public:
 	CString pt;
 	CString ptName;
+	CString ncnnParam;
+	CString ncnnBin;
 	long ptdex;
+	bool bCanConvertNcnn = true;
 }YOLOPT, * PYOLOPT;
 
 void IsTestPt();

@@ -560,7 +560,6 @@ namespace
 	CString      g_strProjectImagesDir;
 	bool         g_bProjectImagesLoaded = false;
 	std::vector<YOLOPT> g_arrProjectWeights;
-	long         g_nProjectWeightIndex = 1;
 }
 
 CStringArray& ProjectImages()
@@ -573,12 +572,21 @@ std::vector<YOLOPT>& ProjectWeights()
 	return g_arrProjectWeights;
 }
 
-long& ProjectWeightIndex()
+CString GetRunWeightDisplayName(LPCTSTR lpszRunName)
 {
-	return g_nProjectWeightIndex;
+	CString strRun = lpszRunName;
+	strRun = strRun.Mid(strRun.GetLength() - 1);
+	long	nRun = _ttol(strRun);
+	if (nRun>1)
+	{
+		nRun--;
+	}
+	CString strDisplay;
+	strDisplay.Format(_T("%ld--best.pt"), nRun);
+	return strDisplay;
 }
 
-// 只在这里读盘：把目录里的图片路径一次性载入内存
+
 void ReloadProjectImages(LPCTSTR lpszDir)
 {
 	CString strDir = lpszDir ? lpszDir : _T("");

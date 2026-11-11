@@ -37,6 +37,8 @@
 #include <string>
 #include <vector>
 
+CComboBox* g_pComboTEST = 0;
+
 namespace
 {
 	const UINT kPwRenderFullContent = 0x00000002;
@@ -222,66 +224,33 @@ namespace
 	}
 
 
-	bool ResolveNcnnModel(const CString& strSel, CString& strParam, CString& strBin)
+	bool RunNcnnExport(const CString& strGreen, const CString& strPython,
+		const CString& strWeights, int nImgsz)
 	{
-		if (::PathIsDirectory(strSel))
-			return FindNcnnPair(strSel, strParam, strBin);
-
-		CString strExt = ::PathFindExtension(strSel);
-		int nDot = strSel.ReverseFind(_T('.'));
-
-		if (strExt.CompareNoCase(_T(".param")) == 0 && nDot > 0)
-		{
-			CString strBinPath = strSel.Left(nDot) + _T(".bin");
-			if (!::PathFileExists(strBinPath))
-				return false;
-			strParam = strSel;
-			strBin = strBinPath;
-			return true;
-		}
-		if (strExt.CompareNoCase(_T(".bin")) == 0 && nDot > 0)
-		{
-			CString strParamPath = strSel.Left(nDot) + _T(".param");
-			if (!::PathFileExists(strParamPath))
-				return false;
-			strParam = strParamPath;
-			strBin = strSel;
-			return true;
-		}
-
-		if (!::PathFileExists(strSel))
+		CString strScript = strGreen + _T("\\scripts\\export_model.py");
+		if (!::PathFileExists(strScript) || !::PathFileExists(strWeights))
 			return false;
 
-		CString strDir = strSel.Left(strSel.ReverseFind(_T('\\')));
-		CString strStem = ::PathFindFileName(strSel);
-		nDot = strStem.ReverseFind(_T('.'));
-		if (nDot > 0)
-			strStem = strStem.Left(nDot);
+		CString strCmd;
+		strCmd.Format(_T("\"%s\" -X utf8 -u \"%s\" --weights \"%s\" --format ncnn --imgsz %d"),
+			(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strWeights, nImgsz);
 
+		CStringW cmd(strCmd);
+		WCHAR* pCmd = cmd.GetBuffer();
+		STARTUPINFOW si = { sizeof(si) };
+		PROCESS_INFORMATION pi = { 0 };
+		BOOL bCreated = ::CreateProcessW(NULL, pCmd, NULL, NULL, FALSE,
+			CREATE_NO_WINDOW, NULL, (LPCTSTR)strGreen, &si, &pi);
+		cmd.ReleaseBuffer();
+		if (!bCreated)
+			return false;
 
-		if (FindNcnnPair(strDir + _T("\\") + strStem + _T("_ncnn_model"), strParam, strBin))
-			return true;
-
-		CFileFind finder;
-		BOOL bMore = finder.FindFile(strDir + _T("\\") + strStem + _T("*.param"));
-		while (bMore)
-		{
-			bMore = finder.FindNextFile();
-			if (finder.IsDirectory())
-				continue;
-
-			CString strParamPath = finder.GetFilePath();
-			CString strBinPath = strParamPath.Left(strParamPath.ReverseFind(_T('.'))) + _T(".bin");
-			if (!::PathFileExists(strBinPath))
-				continue;
-
-			strParam = strParamPath;
-			strBin = strBinPath;
-			finder.Close();
-			return true;
-		}
-		finder.Close();
-		return false;
+		::CloseHandle(pi.hThread);
+		::WaitForSingleObject(pi.hProcess, INFINITE);
+		DWORD dwExit = 1;
+		::GetExitCodeProcess(pi.hProcess, &dwExit);
+		::CloseHandle(pi.hProcess);
+		return dwExit == 0;
 	}
 
 	float BoxIoU(const NcnnBox& a, const NcnnBox& b)
@@ -727,6 +696,7 @@ BOOL CPageTest::OnInitDialog()
 	SetDlgItemText(IDC_EDIT_TEST_IMGSZ, _T("640"));
 	SetDlgItemText(IDC_EDIT_TEST_CONF, _T("0.25"));
 	SetDlgItemText(IDC_EDIT_TEST_IOU, _T("0.45"));
+	g_pComboTEST = (CComboBox*)GetDlgItem(IDC_COMBO_TEST_MODEL);
 	m_bInitializing = true;
 	FillModelCombo();
 	RestoreModelSelection();
@@ -850,26 +820,6 @@ void CPageTest::Layout()
 }
 
 
-static CString MakeModelDisplayName(const CString& strFull)
-{
-	CStringArray arrPrefixes;
-	CString strProj = GetProjectRoot();
-	if (!strProj.IsEmpty())
-		arrPrefixes.Add(strProj + _T("\\"));
-	CString strGreen = GetGreenRoot();
-	if (!strGreen.IsEmpty())
-		arrPrefixes.Add(strGreen + _T("\\"));
-
-	for (INT_PTR i = 0; i < arrPrefixes.GetSize(); i++)
-	{
-		CString strPrefix = arrPrefixes[i];
-		if (strFull.GetLength() > strPrefix.GetLength() &&
-			strFull.Left(strPrefix.GetLength()).CompareNoCase(strPrefix) == 0)
-			return strFull.Mid(strPrefix.GetLength());
-	}
-	return strFull;
-}
-
 void CPageTest::FillModelCombo()
 {
 	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_TEST_MODEL);
@@ -877,61 +827,18 @@ void CPageTest::FillModelCombo()
 		return;
 
 	CString strKeep = GetSelectedModel();
-
 	pCombo->ResetContent();
-	m_arrModels.RemoveAll();
 
-	CStringArray arrFiles;
-	CString strBest = ::GetBestWeightPath();
-	if (!strBest.IsEmpty() && ::PathFileExists(strBest))
-		arrFiles.Add(strBest);
-
-	CStringArray arrDirs;
-	{
-		CString strProj = GetProjectModelsDir();
-		if (!strProj.IsEmpty())
-			arrDirs.Add(strProj);
-		CString strGreen = GetGreenRoot();
-		if (!strGreen.IsEmpty())
-			arrDirs.Add(strGreen + _T("\\models"));
-	}
-
-	for (INT_PTR d = 0; d < arrDirs.GetSize(); d++)
-	{
-		CFileFind finder;
-		BOOL bMore = finder.FindFile(arrDirs[d] + _T("\\*.pt"));
-		while (bMore)
-		{
-			bMore = finder.FindNextFile();
-			if (!finder.IsDirectory())
-				arrFiles.Add(finder.GetFileURL());
-		}
-		finder.Close();
-
-
-		CFileFind finderNcnn;
-		BOOL bMoreNcnn = finderNcnn.FindFile(arrDirs[d] + _T("\\*_ncnn_model"));
-		while (bMoreNcnn)
-		{
-			bMoreNcnn = finderNcnn.FindNextFile();
-			if (finderNcnn.IsDirectory() && !finderNcnn.IsDots())
-				arrFiles.Add(finderNcnn.GetFileURL());
-		}
-		finderNcnn.Close();
-	}
-
-	for (INT_PTR i = 0; i < arrFiles.GetSize(); i++)
-	{
-		pCombo->AddString(MakeModelDisplayName(arrFiles[i]));
-		m_arrModels.Add(arrFiles[i]);
-	}
+	const std::vector<YOLOPT>& weights = ProjectWeights();
+	for (size_t i = 0; i < weights.size(); i++)
+		pCombo->AddString(weights[i].pt);
 
 	int nSel = -1;
 	if (!strKeep.IsEmpty())
 	{
-		for (INT_PTR i = 0; i < m_arrModels.GetSize(); i++)
+		for (size_t i = 0; i < weights.size(); i++)
 		{
-			if (m_arrModels[i].CompareNoCase(strKeep) == 0)
+			if (weights[i].ptName.CompareNoCase(strKeep) == 0)
 			{
 				nSel = (int)i;
 				break;
@@ -951,9 +858,10 @@ CString CPageTest::GetSelectedModel()
 		return _T("");
 
 	int nSel = pCombo->GetCurSel();
-	if (nSel < 0 || nSel >= m_arrModels.GetSize())
+	const std::vector<YOLOPT>& weights = ProjectWeights();
+	if (nSel < 0 || nSel >= (int)weights.size())
 		return _T("");
-	return m_arrModels[nSel];
+	return weights[nSel].ptName;
 }
 
 void CPageTest::SaveLastModel()
@@ -976,25 +884,15 @@ void CPageTest::RestoreModelSelection()
 	if (pCombo == NULL)
 		return;
 
-	int nSel = -1;
-	for (INT_PTR i = 0; i < m_arrModels.GetSize(); i++)
+	const std::vector<YOLOPT>& weights = ProjectWeights();
+	for (size_t i = 0; i < weights.size(); i++)
 	{
-		if (m_arrModels[i].CompareNoCase(strSaved) == 0)
+		if (weights[i].ptName.CompareNoCase(strSaved) == 0)
 		{
-			nSel = (int)i;
+			pCombo->SetCurSel((int)i);
 			break;
 		}
 	}
-
-	if (nSel < 0 && ::PathFileExists(strSaved))
-	{
-		pCombo->AddString(MakeModelDisplayName(strSaved));
-		m_arrModels.Add(strSaved);
-		nSel = pCombo->GetCount() - 1;
-	}
-
-	if (nSel >= 0)
-		pCombo->SetCurSel(nSel);
 }
 
 void CPageTest::OnCbnSelchangeComboTestModel()
@@ -1087,20 +985,94 @@ void CPageTest::ReadDetectParams(int& nImgsz, double& dConf, double& dIou)
 	if (d > 0.0 && d <= 1.0) dIou = d;
 }
 
+bool CPageTest::ResolveSelectedNcnnModel(CString& strParam, CString& strBin)
+{
+	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_TEST_MODEL);
+	if (pCombo == NULL)
+		return false;
+
+	int nSel = pCombo->GetCurSel();
+	std::vector<YOLOPT>& weights = ProjectWeights();
+	if (nSel < 0 || nSel >= (int)weights.size())
+		return false;
+
+	YOLOPT& weight = weights[nSel];
+	if (::PathFileExists(weight.ncnnParam) && ::PathFileExists(weight.ncnnBin))
+	{
+		strParam = weight.ncnnParam;
+		strBin = weight.ncnnBin;
+		return true;
+	}
+
+	int nSlash = weight.ptName.ReverseFind(_T('\\'));
+	if (nSlash <= 0)
+		return false;
+	CString strDir = weight.ptName.Left(nSlash);
+	CString strStem = ::PathFindFileName(weight.ptName);
+	int nDot = strStem.ReverseFind(_T('.'));
+	if (nDot > 0)
+		strStem = strStem.Left(nDot);
+	CString strNcnnDir = strDir + _T("\\") + strStem + _T("_ncnn_model");
+
+	// 已导出的模型直接写回共享容器，不再重复转换
+	if (FindNcnnPair(strNcnnDir, strParam, strBin))
+	{
+		weight.ncnnParam = strParam;
+		weight.ncnnBin = strBin;
+		return true;
+	}
+
+	if (!weight.bCanConvertNcnn)
+		return false;
+
+	CString strGreen = GetGreenRoot();
+	CString strPython = GetGreenPython();
+	if (strGreen.IsEmpty() || strPython.IsEmpty() ||
+		!::PathFileExists(strGreen + _T("\\scripts\\export_model.py")))
+		return false;
+
+	int nImgsz = 640;
+	double dConf = 0.25, dIou = 0.45;
+	ReadDetectParams(nImgsz, dConf, dIou);
+	SetRunning(true);
+	SetStatus(_T("正在将 PT 转换为 NCNN..."));
+	AfxGetApp()->DoWaitCursor(1);
+
+	bool bOk = RunNcnnExport(strGreen, strPython, weight.ptName, nImgsz);
+	if (bOk)
+		bOk = FindNcnnPair(strNcnnDir, strParam, strBin);
+
+	AfxGetApp()->DoWaitCursor(0);
+	SetRunning(false);
+	SetStatus(_T("就绪"));
+
+	if (!bOk)
+	{
+		weight.ncnnParam.Empty();
+		weight.ncnnBin.Empty();
+		weight.bCanConvertNcnn = false;
+		return false;
+	}
+
+	weight.ncnnParam = strParam;
+	weight.ncnnBin = strBin;
+	return true;
+}
+
+
 void CPageTest::StartDetect()
 {
-	CString strModel = GetSelectedModel();
-	if (strModel.IsEmpty())
+	if (GetSelectedModel().IsEmpty())
 	{
-		AfxMessageBox(_T("请先选择模型（可点「刷新」重新扫描 models 目录）。"), MB_ICONWARNING);
+		AfxMessageBox(_T("请先选择 PT 权重（可点「刷新」同步权重列表）。"), MB_ICONWARNING);
 		return;
 	}
 
 	CString strParam, strBin;
-	if (!ResolveNcnnModel(strModel, strParam, strBin))
+	if (!ResolveSelectedNcnnModel(strParam, strBin))
 	{
-		AfxMessageBox(_T("未找到 NCNN 模型（需要 param 与 bin 文件）。\r\n")
-			_T("请先导出 NCNN 模型，或在下拉框中选择 *_ncnn_model 目录。"), MB_ICONWARNING);
+		AfxMessageBox(_T("PT 转 NCNN 失败或该权重不支持转换。\r\n")
+			_T("请检查 YOLO_Green 绿色包及模型文件是否完整。"), MB_ICONWARNING);
 		return;
 	}
 
@@ -1130,18 +1102,17 @@ void CPageTest::StartDetect()
 
 void CPageTest::StartImageDetect()
 {
-	CString strModel = GetSelectedModel();
-	if (strModel.IsEmpty())
+	if (GetSelectedModel().IsEmpty())
 	{
-		AfxMessageBox(_T("请先选择模型（可点「刷新」重新扫描 models 目录）。"), MB_ICONWARNING);
+		AfxMessageBox(_T("请先选择 PT 权重（可点「刷新」同步权重列表）。"), MB_ICONWARNING);
 		return;
 	}
 
 	CString strParam, strBin;
-	if (!ResolveNcnnModel(strModel, strParam, strBin))
+	if (!ResolveSelectedNcnnModel(strParam, strBin))
 	{
-		AfxMessageBox(_T("未找到 NCNN 模型（需要 param 与 bin 文件）。\r\n")
-			_T("请先导出 NCNN 模型，或在下拉框中选择 *_ncnn_model 目录。"), MB_ICONWARNING);
+		AfxMessageBox(_T("PT 转 NCNN 失败或该权重不支持转换。\r\n")
+			_T("请检查 YOLO_Green 绿色包及模型文件是否完整。"), MB_ICONWARNING);
 		return;
 	}
 
@@ -1299,7 +1270,7 @@ void CPageTest::OnBnClickedBtnTestOpen()
 {
 	CFileDialog dlg(TRUE, _T("pt"), NULL,
 		OFN_FILEMUSTEXIST | OFN_HIDEREADONLY,
-		_T("模型文件 (*.pt;*.param)|*.pt;*.param|所有文件 (*.*)|*.*||"), this);
+		_T("PT 权重文件 (*.pt)|*.pt||"), this);
 
 	CString strInitDir = GetProjectModelsDir();
 	if (!::PathIsDirectory(strInitDir))
@@ -1315,27 +1286,33 @@ void CPageTest::OnBnClickedBtnTestOpen()
 		return;
 
 	CString strPath = dlg.GetPathName();
-	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_TEST_MODEL);
-	if (pCombo == NULL)
-		return;
-
+	std::vector<YOLOPT>& weights = ProjectWeights();
 	int nSel = -1;
-	for (INT_PTR i = 0; i < m_arrModels.GetSize(); i++)
+	for (size_t i = 0; i < weights.size(); i++)
 	{
-		if (m_arrModels[i].CompareNoCase(strPath) == 0)
+		if (weights[i].ptName.CompareNoCase(strPath) == 0)
 		{
 			nSel = (int)i;
 			break;
 		}
 	}
+
 	if (nSel < 0)
 	{
-		pCombo->AddString(MakeModelDisplayName(strPath));
-		m_arrModels.Add(strPath);
-		nSel = pCombo->GetCount() - 1;
+		YOLOPT weight;
+		weight.pt = dlg.GetFileName();
+		weight.ptName = strPath;
+		weight.ptdex = (long)weights.size();
+		weights.push_back(weight);
+		nSel = (int)weights.size() - 1;
 	}
-	pCombo->SetCurSel(nSel);
-	SetStatus(_T("已加载模型: ") + MakeModelDisplayName(strPath));
+
+	RefreshWeightCombos();
+	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_TEST_MODEL);
+	if (pCombo != NULL)
+		pCombo->SetCurSel(nSel);
+	SaveLastModel();
+	SetStatus(_T("已加载模型: ") + dlg.GetFileName());
 }
 
 void CPageTest::OnBnClickedBtnTestRefresh()

@@ -49,6 +49,7 @@ private:
 	void StartDetect();
 	void StartImageDetect();
 	void ReadDetectParams(int& nImgsz, double& dConf, double& dIou);
+	bool ResolveSelectedNcnnModel(CString& strParam, CString& strBin);
 	void RunNcnnOnBitmap(const CString& strParam, const CString& strBin,
 		void* pBgr, int w, int h);
 	void SetRunning(bool bRunning);
@@ -59,7 +60,6 @@ private:
 
 	CPreviewStatic  m_wndPreview;      
 	CFinderStatic   m_wndFinder;       
-	CStringArray    m_arrModels;       
 	CString         m_strResultPath;   
 	ULONGLONG       m_ullResultTime;   
 	bool            m_bRunning;        

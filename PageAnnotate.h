@@ -148,7 +148,6 @@ protected:
 	CString               m_strAiModel;              
 	CStringArray          m_arrAiTodo;       
 	std::vector<YOLOPT>&  m_ptArr;
-	long&                 m_idxl;
 public:
 	afx_msg BOOL OnHelpInfo(HELPINFO* pHelpInfo);
 	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
