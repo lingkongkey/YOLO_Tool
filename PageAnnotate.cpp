@@ -855,7 +855,7 @@ BOOL CPageAnnotate::PreTranslateMessage(MSG* pMsg)
 				BOOL bInSelection = (nSelCount != LB_ERR && nSelCount > 1 && pList->GetSel(nIndex) > 0);
 				if (!bInSelection)
 				{
-					pList->SetCurSel(nIndex);
+					SelectListRow(nIndex);
 					if (nIndex != m_nCurImage)
 						LoadImageAt(nIndex);
 				}
@@ -902,7 +902,7 @@ BOOL CPageAnnotate::PreTranslateMessage(MSG* pMsg)
 				BOOL bInSelection = (nSelCount != LB_ERR && nSelCount > 1 && pList->GetSel(nIndex) > 0);
 				if (!bInSelection)
 				{
-					pList->SetCurSel(nIndex);
+					SelectListRow(nIndex);
 					if (nIndex != m_nCurImage)
 						LoadImageAt(nIndex);
 				}
@@ -1118,17 +1118,33 @@ void CPageAnnotate::RefreshPage()
 
 	if (nKeepLocal >= 0 && nKeepLocal < pList->GetCount())
 	{
-		pList->SetCurSel(nKeepLocal);
+		SelectListRow(nKeepLocal);
 		pList->SetTopIndex(nKeepLocal);
 	}
 	else if (m_nCurImage < 0 && pList->GetCount() > 0)
 	{
-		// 打开标注页且尚未定位图片时，默认选中第一行
-		pList->SetCurSel(0);
+		// On first open with no current image, select the first row
+		SelectListRow(0);
 		pList->SetTopIndex(0);
 	}
 
 	RefreshAnnotatedFlags();
+}
+
+// For LBS_EXTENDEDSEL lists, SetCurSel has no effect; use SetSel to sync selection
+void CPageAnnotate::SelectListRow(int nLocal)
+{
+	CListBox* pList = (CListBox*)GetDlgItem(IDC_LIST_IMAGES);
+	if (pList == NULL)
+		return;
+
+	int nCount = pList->GetCount();
+	if (nLocal < 0 || nLocal >= nCount)
+		return;
+
+	pList->SetSel(-1, FALSE);       // clear highlight on other rows
+	pList->SetSel(nLocal, TRUE);    // select the target row
+	pList->SetCaretIndex(nLocal, TRUE);
 }
 
 // 计算当前页每张图的标注状态，供列表自绘使用
@@ -1328,7 +1344,7 @@ void CPageAnnotate::OnCbnSelchangeComboPageSize()
 		int nLocal = m_nCurImage % m_nPageSize;
 		CListBox* pList = (CListBox*)GetDlgItem(IDC_LIST_IMAGES);
 		if (pList != NULL && nLocal < pList->GetCount())
-			pList->SetCurSel(nLocal);
+			SelectListRow(nLocal);
 	}
 	else
 	{
@@ -1342,7 +1358,8 @@ void CPageAnnotate::ShowListMenu(int x, int y)
 	if (pList == NULL)
 		return;
 
-	int nCurLocal = pList->GetCurSel();
+	// LBS_EXTENDEDSEL has no GetCurSel; use GetCaretIndex for the focused row
+	int nCurLocal = pList->GetCaretIndex();
 	int nCur = LocalToGlobal(nCurLocal);
 	if (nCur < 0)
 		return;
@@ -1555,8 +1572,8 @@ bool CPageAnnotate::LoadImageAt(int nIndex, bool bKeepListSelection)
 		if (bKeepListSelection)
 			pList->SetCaretIndex(nLocal);
 		else
-			pList->SetCurSel(nLocal);
-		// 让选中行滚动到可见区域，避免只在内部改变了选中项而用户看不到
+			SelectListRow(nLocal);
+		// Scroll the selected row into view so the highlight is visible
 		pList->SetCaretIndex(nLocal, TRUE);
 
 		UpdateAnnoStatus();
@@ -1618,7 +1635,7 @@ bool CPageAnnotate::SaveAndNext()
 	int nNext = m_nCurImage + 1;
 	if (nNext < (int)m_arrImages.GetSize())
 	{
-		// LoadImageAt 内部会自动切页并选中对应行（跨页时自动选中下一页第一行）
+		// LoadImageAt switches page automatically and selects the right row
 		LoadImageAt(nNext);
 		AppendLog(_T("Ctrl+S 已保存并跳到下一张\r\n"));
 	}
@@ -1708,7 +1725,8 @@ void CPageAnnotate::OnLbnSelchangeListImages()
 	if (pList == NULL)
 		return;
 
-	int nSel = pList->GetCurSel();
+	// LBS_EXTENDEDSEL has no GetCurSel; use GetCaretIndex for the focused row
+	int nSel = pList->GetCaretIndex();
 	int nSelGlobal = LocalToGlobal(nSel);
 	if (nSelGlobal < 0)
 		return;
@@ -1953,7 +1971,7 @@ void CPageAnnotate::OnBnClickedBtnSaveClasses()
 }
 
 
-// 解析预标注所需的权重路径与置信度
+// Resolve weights path and confidence for pre-annotation
 bool CPageAnnotate::ResolveAnnotateParams(CString& strWeightsPath, CString& strConf)
 {
 	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_ANN);
@@ -1997,7 +2015,7 @@ bool CPageAnnotate::ResolveAnnotateParams(CString& strWeightsPath, CString& strC
 	return true;
 }
 
-// 预标注当前选中的单张图片
+// Pre-annotate the currently selected single image
 void CPageAnnotate::OnBnClickedBtnAnnotate()
 {
 	if (m_capture.IsRunning())
@@ -2061,7 +2079,7 @@ void CPageAnnotate::OnCbnSelchangeComboAiProvider()
 	}
 }
 
-// 校验并读取 AI 标注参数（Key / 接口地址 / 模型名）
+// Validate and read AI params (key / base / model)
 bool CPageAnnotate::PrepareAiParams()
 {
 	CString strKey;
@@ -2087,7 +2105,7 @@ bool CPageAnnotate::PrepareAiParams()
 	return true;
 }
 
-// AI 标注所有未标注的图片
+// AI annotate all unlabeled images
 void CPageAnnotate::OnBnClickedBtnAiAnnotate()
 {
 	if (m_bAiRunning)
@@ -2388,7 +2406,7 @@ void CPageAnnotate::HandleAiResult(AiAnnotateResult* pResult)
 		CString strLabel = GetLabelPathFor(strImg);
 		if (bWriteLabel && !WriteUtf8File(strLabel, strContent))
 			AppendLog(_T("标签写入失败: ") + strLabel + _T("\r\n"));
-		// 标签状态变化后刷新左侧列表的已标注圆点
+		// Refresh annotated dots in the list after label changed
 		RefreshAnnotatedFlags();
 
 		CString strSkip;
@@ -2719,7 +2737,7 @@ LRESULT CPageAnnotate::OnProcExit(WPARAM wParam, LPARAM /*lParam*/)
 	if (dwExit == 0 && m_canvas.HasImage())
 		m_canvas.LoadImage(m_canvas.GetImagePath(), GetLabelPathFor(m_canvas.GetImagePath()));
 
-	// 预标注结束后刷新列表的已标注状态
+	// Refresh annotated state after the pre-annotation process exits
 	RefreshAnnotatedFlags();
 
 	UpdateAnnoStatus();
@@ -2804,7 +2822,7 @@ HBRUSH CPageAnnotate::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 }
 
 
-// AI 标注当前选中的单张图片（已存在标签会被覆盖）
+// AI annotate the currently selected single image (overwrites existing label)
 void CPageAnnotate::OnBnClickedBtnAiAnnotate2()
 {
 	if (m_bAiRunning)

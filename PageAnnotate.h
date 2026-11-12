@@ -108,6 +108,9 @@ protected:
 	bool ResolveAnnotateParams(CString& strWeightsPath, CString& strConf);
 
 	bool PrepareAiParams();
+
+	// LBS_EXTENDEDSEL list requires SetSel; SetCurSel has no effect on multi-select lists
+	void SelectListRow(int nLocal);
 	
 	CString GetLabelPathFor(LPCTSTR lpszImage);
 

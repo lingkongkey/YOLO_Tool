@@ -150,6 +150,10 @@ bool CAnnotateCanvas::SaveLabels(LPCTSTR lpszLabelPath)
 		strAll += strLine;
 	}
 
+	if (strAll.IsEmpty())
+	{
+		return false;
+	}
 	CFile file;
 	if (!file.Open(lpszLabelPath, CFile::modeCreate | CFile::modeWrite | CFile::typeBinary))
 		return false;
