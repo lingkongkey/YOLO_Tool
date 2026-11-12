@@ -14,9 +14,11 @@ import io
 import json
 import math
 import os
+import shutil
 import sqlite3
 import sys
 import tarfile
+import time
 import zlib
 from pathlib import Path
 
@@ -43,6 +45,10 @@ CHECKPOINT_FORMAT = "keyolo-pack-checkpoint"
 APPEND_CHECKPOINT_FORMAT = "keyolo-append-checkpoint"
 INVENTORY_FORMAT = "keyolo-source-inventory"
 STATE_VERSION = 1
+
+
+class IncrementalConflict(ValueError):
+    """增量追加发现源图片/标签被修改或删除，需要整包重建。"""
 
 
 def atomic_json(path, value):
@@ -814,7 +820,7 @@ class IncrementalPacker(SplitPacker):
             ).fetchall()
             if deleted:
                 examples = "、".join(row[0] for row in deleted)
-                raise ValueError(
+                raise IncrementalConflict(
                     f"检测到旧图片被删除，增量追加仅支持新增: {examples}。"
                     "如需删除，请使用新的输出目录重新打包"
                 )
@@ -825,7 +831,7 @@ class IncrementalPacker(SplitPacker):
             ).fetchall()
             if changed:
                 examples = "、".join(row[0] for row in changed)
-                raise ValueError(
+                raise IncrementalConflict(
                     f"检测到旧图片或标签被修改，拒绝静默混用版本: {examples}。"
                     "如需修改，请使用新的输出目录重新打包"
                 )
@@ -1125,6 +1131,54 @@ def update_packed_dataset(
             flush=True,
         )
         raise SystemExit(130)
+
+
+def rebuild_packed_dataset(
+    data_path,
+    output,
+    shard_size=5000,
+    shard_mb=1024,
+    checkpoint_interval=100,
+):
+    """源图片/标签变更后自动整包重建。
+
+    旧打包目录先整体重命名备份，重建成功后再删除；
+    重建失败时清理半成品并还原旧目录，避免丢失可用数据。
+    """
+    data_path = Path(data_path).resolve()
+    output = Path(output).resolve()
+    backup = None
+    if output.exists():
+        if not output.is_dir():
+            raise NotADirectoryError(f"输出路径不是目录: {output}")
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        backup = output.with_name(f"{output.name}.old.{stamp}")
+        index = 1
+        while backup.exists():
+            backup = output.with_name(f"{output.name}.old.{stamp}_{index}")
+            index += 1
+        os.replace(output, backup)
+        print(f"[INFO] 已备份旧打包目录: {backup}", flush=True)
+
+    try:
+        result = pack_dataset(
+            data_path,
+            output,
+            shard_size=shard_size,
+            shard_mb=shard_mb,
+            checkpoint_interval=checkpoint_interval,
+        )
+    except BaseException:
+        # 重建失败：删除半成品并还原旧目录，保证下次仍可用
+        shutil.rmtree(output, ignore_errors=True)
+        if backup is not None and backup.exists():
+            os.replace(backup, output)
+        raise
+
+    if backup is not None:
+        shutil.rmtree(backup, ignore_errors=True)
+        print(f"[INFO] 旧打包目录已清理: {backup}", flush=True)
+    return result
 
 
 def main():

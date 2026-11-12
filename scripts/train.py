@@ -178,11 +178,22 @@ def auto_pack_dataset(data_path):
     packed_root = data_path.parent / "packed"
     packed_data = packed_root / "data.yaml"
     if is_packed_output(packed_data):
-        from pack_dataset import update_packed_dataset
+        from pack_dataset import (
+            IncrementalConflict,
+            rebuild_packed_dataset,
+            update_packed_dataset,
+        )
 
         print(f"[INFO] 检查新增图片并自动增量追加: {packed_root}", flush=True)
-        result = update_packed_dataset(data_path, packed_root)
-        return str(result)
+        try:
+            result = update_packed_dataset(data_path, packed_root)
+            return str(result)
+        except IncrementalConflict as exc:
+            # 源图片或标签被修改/删除，增量追加无法保证一致性，自动整包重建
+            print(f"[WARN] {exc}", flush=True)
+            print(f"[INFO] 检测到源数据变更，自动重新打包: {packed_root}", flush=True)
+            result = rebuild_packed_dataset(data_path, packed_root)
+            return str(result)
 
     ensure_val_split(data_path)
     from pack_dataset import pack_dataset
