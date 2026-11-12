@@ -14,6 +14,11 @@ x64/
 Debug/
 Release/
 
+# Python 缓存与训练输出
+__pycache__/
+*.pyc
+runs/
+
 # 编译产物
 *.obj
 *.pdb
