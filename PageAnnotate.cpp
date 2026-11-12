@@ -772,6 +772,16 @@ BOOL CPageAnnotate::PreTranslateMessage(MSG* pMsg)
 	}
 	else
 	{
+		// Alt + arrow: resize one edge of the selected box; forward before dialog handling
+		if ((pMsg->message == WM_SYSKEYDOWN || pMsg->message == WM_KEYDOWN) &&
+			(pMsg->wParam == VK_LEFT || pMsg->wParam == VK_RIGHT || pMsg->wParam == VK_UP || pMsg->wParam == VK_DOWN) &&
+			pMsg->hwnd == m_canvas.GetSafeHwnd())
+		{
+			bool bAlt = (pMsg->message == WM_SYSKEYDOWN) || ((::GetKeyState(VK_MENU) & 0x8000) != 0);
+			if (m_canvas.NudgeSelectedBox(pMsg->wParam, bAlt))
+				return TRUE;
+		}
+
 		if (pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_RETURN  && (pMsg->lParam & 0x40000000) == 0) //回车保存
 		{
 			SaveAndNext();
@@ -2813,9 +2823,9 @@ HBRUSH CPageAnnotate::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 	HBRUSH hbr = CDialogEx::OnCtlColor(pDC, pWnd, nCtlColor);
 	if (pWnd->GetDlgCtrlID() == IDC_EDIT_LOG_ANN)
 	{
-		pDC->SetTextColor(RGB(255, 255, 255));
+		pDC->SetTextColor(RGB(0x1A, 0x1A, 0x1A));
 		pDC->SetBkMode(TRANSPARENT);
-		static CBrush brushBlack(RGB(0, 0, 0));
+		static CBrush brushBlack(RGB(0xff, 0xff, 0xff));
 		return brushBlack;
 	}
 	return hbr;

@@ -36,6 +36,9 @@ public:
 	bool IsModified() const { return m_bModified; }
 	void DeleteSelected();
 
+	// Arrow-key nudge for the selected box: bEdgeOnly=false moves it, true resizes one edge
+	bool NudgeSelectedBox(UINT nVK, bool bEdgeOnly);
+
 protected:
 	afx_msg void OnPaint();
 	afx_msg BOOL OnEraseBkgnd(CDC* pDC);
@@ -49,6 +52,7 @@ protected:
 	afx_msg void OnMButtonDown(UINT nFlags, CPoint point);
 	afx_msg void OnMButtonUp(UINT nFlags, CPoint point);
 	afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags);
+	afx_msg void OnSysKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags);
 	afx_msg UINT OnGetDlgCode();
 	afx_msg void OnCaptureChanged(CWnd* pWnd);
 	DECLARE_MESSAGE_MAP()

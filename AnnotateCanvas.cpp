@@ -42,6 +42,7 @@ BEGIN_MESSAGE_MAP(CAnnotateCanvas, CWnd)
 	ON_WM_MBUTTONDOWN()
 	ON_WM_MBUTTONUP()
 	ON_WM_KEYDOWN()
+	ON_WM_SYSKEYDOWN()
 	ON_WM_GETDLGCODE()
 	ON_WM_CAPTURECHANGED()
 END_MESSAGE_MAP()
@@ -702,8 +703,78 @@ UINT CAnnotateCanvas::OnGetDlgCode()
 void CAnnotateCanvas::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 {
 	if (nChar == VK_DELETE || nChar == VK_BACK)
+	{
 		DeleteSelected();
+		return;
+	}
+
+	if (nChar == VK_LEFT || nChar == VK_RIGHT || nChar == VK_UP || nChar == VK_DOWN)
+	{
+		bool bAlt = (::GetKeyState(VK_MENU) & 0x8000) != 0;
+		if (NudgeSelectedBox(nChar, bAlt))
+			return;
+	}
+
 	CWnd::OnKeyDown(nChar, nRepCnt, nFlags);
+}
+
+// Alt + arrow arrives as WM_SYSKEYDOWN; adjust the corresponding edge only
+void CAnnotateCanvas::OnSysKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
+{
+	if (nChar == VK_LEFT || nChar == VK_RIGHT || nChar == VK_UP || nChar == VK_DOWN)
+	{
+		if (NudgeSelectedBox(nChar, true))
+			return;
+	}
+
+	CWnd::OnSysKeyDown(nChar, nRepCnt, nFlags);
+}
+
+// Arrow nudge: bEdgeOnly=false moves the whole box, true resizes one edge
+bool CAnnotateCanvas::NudgeSelectedBox(UINT nVK, bool bEdgeOnly)
+{
+	if (m_nSelBox < 0 || m_nSelBox >= (int)m_arrBoxes.size() || m_image.IsNull())
+		return false;
+
+	BeginEdit();
+	AnnoBox& box = m_arrBoxes[m_nSelBox];
+	CRect rc = box.rc;
+	const int nStep = 1;
+
+	if (!bEdgeOnly)
+	{
+		switch (nVK)
+		{
+		case VK_LEFT:  rc.OffsetRect(-nStep, 0); break;
+		case VK_RIGHT: rc.OffsetRect(nStep, 0); break;
+		case VK_UP:    rc.OffsetRect(0, -nStep); break;
+		case VK_DOWN:  rc.OffsetRect(0, nStep); break;
+		default:       return false;
+		}
+	}
+	else
+	{
+		switch (nVK)
+		{
+		case VK_UP:    rc.bottom -= nStep; break;   // bottom edge up, box shorter
+		case VK_DOWN:  rc.bottom += nStep; break;   // bottom edge down, box taller
+		case VK_LEFT:  rc.right -= nStep; break;    // right edge left, box narrower
+		case VK_RIGHT: rc.right += nStep; break;    // right edge right, box wider
+		default:       return false;
+		}
+	}
+
+	box.rc = rc;
+	ClampBoxRect(box);
+
+	if (SameBoxes(m_arrBoxes, m_arrPending))
+		return true;
+
+	CommitEdit();
+	m_bModified = true;
+	Invalidate();
+	NotifyChanged();
+	return true;
 }
 
 
