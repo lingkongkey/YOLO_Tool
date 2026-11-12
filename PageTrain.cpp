@@ -1228,9 +1228,9 @@ HBRUSH CPageTrain::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 	HBRUSH hbr = CDialogEx::OnCtlColor(pDC, pWnd, nCtlColor);
 	if (pWnd->GetDlgCtrlID() == IDC_EDIT_LOG_TRAIN)
 	{
-		pDC->SetTextColor(RGB(255, 255, 255));
+		pDC->SetTextColor(RGB(0x1a, 0x1a, 0x1a));
 		pDC->SetBkMode(TRANSPARENT);
-		static CBrush brushBlack(RGB(0, 0, 0));
+		static CBrush brushBlack(RGB(0xff, 0xff, 0xff));
 		return brushBlack;
 	}
 
