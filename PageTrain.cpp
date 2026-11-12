@@ -15,9 +15,11 @@
 #include "File/zlib/zlib.h"
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "zlib.lib")
-extern CPageAnnotate* g_CPagethis;
+
 CPageTrain* g_CPageTrain = NULL;
 CComboBox* g_pComboXUN = 0;
+CComboBox* g_pExter = 0;
+
 extern CComboBox* g_pComboBIAOZHU;
 extern CComboBox* g_pComboTEST;
 #ifdef _DEBUG
@@ -168,6 +170,7 @@ BEGIN_MESSAGE_MAP(CPageTrain, CDialogEx)
 	ON_MESSAGE(WM_USER_PROC_EXIT, &CPageTrain::OnProcExit)
 	ON_WM_HELPINFO()
 	ON_WM_CTLCOLOR()
+	ON_CBN_SELCHANGE(IDC_COMBO_EXPORT_FMT2, &CPageTrain::OnCbnSelchangeComboExportFmt2)
 END_MESSAGE_MAP()
 
 void CPageTrain::DoDataExchange(CDataExchange* pDX)
@@ -181,6 +184,7 @@ BOOL CPageTrain::OnInitDialog()
 	CDialogEx::OnInitDialog();
 	CEdit* p = (CEdit*)GetDlgItem(IDC_EDIT_LOG_TRAIN);
 	g_pComboXUN = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_TRAIN);
+	g_pExter = (CComboBox*)GetDlgItem(IDC_COMBO_EXPORT_FMT2);
 	g_CPageTrain = this;
 	p->SetReadOnly(TRUE);
 
@@ -332,7 +336,7 @@ void CPageTrain::Layout()
 
 	mv(IDC_GRP_TRAIN_PARAMS, rightX, M, RIGHTW, colH);
 	mv(IDC_LBL_WEIGHTS_TRAIN, rightX + 10, M + 26, 44, 14);
-	mv(IDC_COMBO_WEIGHTS_TRAIN, rightX + 10, M + 44, RIGHTW - 20, 160);
+	mv(IDC_COMBO_WEIGHTS_TRAIN, rightX + 10, M + 44, RIGHTW - 20, 300);
 	mv(IDC_LBL_EPOCHS, rightX + 10, M + 80, 56, 14);
 	mv(IDC_EDIT_EPOCHS, rightX + 70, M + 78, 64, 21);
 	mv(IDC_LBL_IMGSZ, rightX + 10, M + 110, 56, 14);
@@ -342,12 +346,15 @@ void CPageTrain::Layout()
 	mv(IDC_CHK_RESUME, rightX + 10, M + 168, RIGHTW - 20, 18);
 	mv(IDC_CHK_GPU, rightX + 10, M + 192, RIGHTW - 20, 18);
 
-
+	//
 
 	mv(IDC_LBL_EXPORT_FMT, rightX + 10, M + 268, RIGHTW - 20, 18);
 	mv(IDC_COMBO_EXPORT_FMT, rightX + 10, M + 292, RIGHTW - 54, 25);
 
-	mv(IDC_BTN_EXPORT, rightX + 10, M + 322, RIGHTW - 180, 30);
+	mv(IDC_LBL_EPOCHS2, rightX + 10, M + 328, RIGHTW - 180, 30);
+	mv(IDC_COMBO_EXPORT_FMT2, rightX + 70, M + 322, RIGHTW - 130, 200);
+	mv(IDC_BTN_EXPORT, rightX + 180, M + 322, RIGHTW - 200, 25);
+	
 	int btnW = (RIGHTW - 28) / 2;
 	int btnY = M + colH - 8 - 30;
 
@@ -405,10 +412,35 @@ void CPageTrain::OnShowWindow(BOOL bShow, UINT nStatus)
 void RefreshWeightCombos()
 {
 	std::vector<YOLOPT>& weights = ProjectWeights();
+	if (g_pExter)
+	{
+		g_pExter->ResetContent();
+	}
+
+	long idx = 0;
 	for (size_t i = 0; i < weights.size(); i++)
 	{
 		weights[i].ptdex = (long)i;
+		if (g_pExter)
+		{
+			CStringA str(weights[i].pt.Mid(0, 1));
+
+			if (str[0] >= L'0' && str[0] <= L'9')
+			{
+				long  dx = StrToInt(weights[i].pt.Mid(0, 1));
+				g_pExter->InsertString(g_pExter->GetCount(), weights[i].pt);
+				if (dx > idx)
+				{
+					idx = dx;
+
+					g_pExter->SetCurSel(g_pExter->GetCount() - 1);
+				}
+
+			}
+		}
+
 	}
+
 
 	CComboBox* combos[] = { g_pComboXUN, g_pComboBIAOZHU, g_pComboTEST };
 	for (int c = 0; c < 3; c++)
@@ -485,6 +517,7 @@ void CPageTrain::GetPtPath()
 				t_p.ptName = strPath;
 				t_p.ptdex = (long)m_ptArr.size();
 				m_ptArr.push_back(t_p);
+
 			}
 			finderCheck.Close();
 		}
@@ -493,12 +526,15 @@ void CPageTrain::GetPtPath()
 	RefreshWeightCombos();
 }
 
+
+
 void CPageTrain::FillWeightsCombo()
 {
-	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_TRAIN);
+	CComboBox* pCombo = g_pComboXUN;
 	if (pCombo == nullptr)
 		return;
 
+	g_pExter->ResetContent();
 	pCombo->ResetContent();
 
 	CStringArray arrDirs;
@@ -781,7 +817,23 @@ void CPageTrain::StartExport()
 		return;
 	}
 
-	CString strBest = GetBestWeightPath();
+	CString strBest;
+	int nSel = g_pExter->GetCurSel();
+	if (nSel >= 0)
+	{
+		g_pExter->GetLBText(nSel, strBest);
+	}
+
+	for (size_t i = 0; i < m_ptArr.size(); i++)
+	{
+		if (m_ptArr[i].pt== strBest)
+		{
+			strBest = m_ptArr[i].ptName;
+			break;
+		}
+	}
+
+	
 	if (!::PathFileExists(strBest))
 	{
 		AppendLog(_T("best.pt not found, please train first\r\n"));
@@ -795,7 +847,7 @@ void CPageTrain::StartExport()
 		AppendLog(_T("导出格式下拉框控件获取失败\r\n"));
 		return;
 	}
-	int nSel = pCombo->GetCurSel();
+	 nSel = pCombo->GetCurSel();
 	if (nSel == CB_ERR)
 	{
 		AfxMessageBox(_T("请先选择导出格式！"), MB_ICONWARNING);
@@ -1156,7 +1208,8 @@ LRESULT CPageTrain::OnProcExit(WPARAM wParam, LPARAM lParam)
 
 	if (!bExport && dwExit == 0)
 	{
-		g_CPagethis->GetPtPath();
+		RefreshWeightCombos();
+		UpPt();
 	}
 	if (!bExport && dwExit == 0 && IsDlgButtonChecked(IDC_CHK_EXIT) == BST_CHECKED)
 	{
@@ -1182,4 +1235,10 @@ HBRUSH CPageTrain::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 	}
 
 	return hbr;
+}
+
+
+void CPageTrain::OnCbnSelchangeComboExportFmt2()
+{
+	
 }

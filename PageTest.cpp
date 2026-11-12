@@ -38,6 +38,7 @@
 #include <vector>
 
 CComboBox* g_pComboTEST = 0;
+CPageTest* g_CPageTest=0;
 
 namespace
 {
@@ -693,6 +694,7 @@ BOOL CPageTest::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
 
+	g_CPageTest = NULL;
 	SetDlgItemText(IDC_EDIT_TEST_IMGSZ, _T("640"));
 	SetDlgItemText(IDC_EDIT_TEST_CONF, _T("0.25"));
 	SetDlgItemText(IDC_EDIT_TEST_IOU, _T("0.45"));
@@ -822,7 +824,7 @@ void CPageTest::Layout()
 
 void CPageTest::FillModelCombo()
 {
-	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_TEST_MODEL);
+	CComboBox* pCombo = g_pComboTEST;
 	if (pCombo == NULL)
 		return;
 
@@ -853,7 +855,7 @@ void CPageTest::FillModelCombo()
 
 CString CPageTest::GetSelectedModel()
 {
-	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_TEST_MODEL);
+	CComboBox* pCombo = g_pComboTEST;
 	if (pCombo == NULL)
 		return _T("");
 
@@ -880,7 +882,7 @@ void CPageTest::RestoreModelSelection()
 	if (strSaved.IsEmpty())
 		return;
 
-	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_TEST_MODEL);
+	CComboBox* pCombo = g_pComboTEST;
 	if (pCombo == NULL)
 		return;
 
@@ -987,7 +989,7 @@ void CPageTest::ReadDetectParams(int& nImgsz, double& dConf, double& dIou)
 
 bool CPageTest::ResolveSelectedNcnnModel(CString& strParam, CString& strBin)
 {
-	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_TEST_MODEL);
+	CComboBox* pCombo = g_pComboTEST;
 	if (pCombo == NULL)
 		return false;
 
@@ -1014,7 +1016,7 @@ bool CPageTest::ResolveSelectedNcnnModel(CString& strParam, CString& strBin)
 		strStem = strStem.Left(nDot);
 	CString strNcnnDir = strDir + _T("\\") + strStem + _T("_ncnn_model");
 
-	// 已导出的模型直接写回共享容器，不再重复转换
+
 	if (FindNcnnPair(strNcnnDir, strParam, strBin))
 	{
 		weight.ncnnParam = strParam;

@@ -20,4 +20,5 @@ public:
 void IsTestPt();
 void RefreshWeightCombos();
 BOOL IsPt(std::vector<YOLOPT>& pt, CString str);
+void UpPt();
 #endif //PCH_H

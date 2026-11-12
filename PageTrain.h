@@ -72,4 +72,5 @@ protected:
 	long m_line=0;	
 public:
 	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
+	afx_msg void OnCbnSelchangeComboExportFmt2();
 };

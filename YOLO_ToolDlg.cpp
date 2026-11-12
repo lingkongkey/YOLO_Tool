@@ -206,10 +206,10 @@ void CYOLOToolDlg::ShowPage(int nPage)
 	m_pageTrain.ShowWindow(nPage == 2 ? SW_SHOW : SW_HIDE);
 	m_pageTest.ShowWindow(nPage == 3 ? SW_SHOW : SW_HIDE);
 	m_nCurPage = nPage;
-	if (nPage==1)
-	{
-		g_CPagethis->FillImageList();
-	}
+	//if (nPage==1)
+	//{
+	//	g_CPagethis->FillImageList();
+	//}
 }
 
 void CYOLOToolDlg::OnTcnSelchangeTab(NMHDR* /*pNMHDR*/, LRESULT* pResult)

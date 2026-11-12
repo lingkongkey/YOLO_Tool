@@ -32,7 +32,7 @@ protected:
 	afx_msg LRESULT OnFinderPicked(WPARAM wParam, LPARAM lParam);
 	DECLARE_MESSAGE_MAP()
 
-private:
+	public:
 	
 	void FillModelCombo();
 	

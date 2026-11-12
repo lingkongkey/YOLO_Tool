@@ -30,7 +30,7 @@ public:
 	// ===== UI =====
 	CString strCloseAction;
 
-private:
+public:
 	CAppConfig();
 	~CAppConfig();
 	CAppConfig(const CAppConfig&) = delete;

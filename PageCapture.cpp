@@ -13,7 +13,7 @@
 #include <shlobj.h>
 #include <shellapi.h>
 #pragma comment(lib, "shlwapi.lib")
-
+#include "MyIniPuls.h"
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -569,8 +569,13 @@ void CPageCapture::OnEnChangeEditMaxcount()
 	GetDlgItemText(IDC_EDIT_MAXCOUNT, strText);
 	strText.Trim();
 	CAppConfig::Instance().strCaptureLimit = strText;
+	
+	MyIniPuls ini;
+	CStringA str(strText);
+	ini.CreateIniFilePath("app_config.ini");
+	
+	ini.WriteIni("Capture_Limit", str.GetBuffer());
 
-	// 上限改动后立即刷新状态栏的 已用/上限
 	UpdateStatus(m_strState);
 }
 
@@ -583,6 +588,11 @@ void CPageCapture::OnEnChangeEditInterval()
 	GetDlgItemText(IDC_EDIT_INTERVAL, strText);
 	strText.Trim();
 	CAppConfig::Instance().strCaptureInterval = strText;
+	MyIniPuls ini;
+	CStringA str(strText);
+	ini.CreateIniFilePath("app_config.ini");
+
+	ini.WriteIni("Capture_Interval", str.GetBuffer());
 }
 
 void CPageCapture::OnBnClickedBtnAuto()

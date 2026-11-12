@@ -104,6 +104,10 @@ protected:
 	bool SaveCurrentLabels();
 
 	bool SaveAndNext();
+
+	bool ResolveAnnotateParams(CString& strWeightsPath, CString& strConf);
+
+	bool PrepareAiParams();
 	
 	CString GetLabelPathFor(LPCTSTR lpszImage);
 
@@ -151,4 +155,5 @@ protected:
 public:
 	afx_msg BOOL OnHelpInfo(HELPINFO* pHelpInfo);
 	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
+	afx_msg void OnBnClickedBtnAiAnnotate2();
 };
