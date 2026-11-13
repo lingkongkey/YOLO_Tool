@@ -52,7 +52,6 @@
 #define IDC_LBL_SAVE_DIR                1124
 #define IDC_GRP_PREVIEW                 1125
 #define IDC_GRP_CLASSES                 1126
-#define IDC_GRP_SNAP2                   1126
 #define IDC_GRP_ANNOTATE                1127
 #define IDC_LBL_WEIGHTS_ANN             1128
 #define IDC_LBL_CONF                    1129
@@ -124,6 +123,7 @@
 #define IDC_STATIC_CAP_PAGE             1202
 #define IDC_LBL_EPOCHS2                 1203
 #define IDC_BTN_AI_ANNOTATE2            1204
+#define IDC_GRP_SNAP2                   1205
 
 // Next default values for new objects
 // 

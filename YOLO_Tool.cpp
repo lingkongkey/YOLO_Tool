@@ -25,10 +25,29 @@ CYOLOToolApp::CYOLOToolApp()
 	
 }
 
+HANDLE g_Maxmux = 0;
 CYOLOToolApp theApp;
 
 BOOL CYOLOToolApp::InitInstance()
 {
+	/*
+	// {E240184D-B1EB-42FE-89CD-5F386DE8C041}
+IMPLEMENT_OLECREATE(<<class>>, <<external_name>>,
+0xe240184d, 0xb1eb, 0x42fe, 0x89, 0xcd, 0x5f, 0x38, 0x6d, 0xe8, 0xc0, 0x41);
+
+	*/
+	g_Maxmux = CreateMutexA(NULL, TRUE, "{E240184D-B1EB-42FE-89CD-5F386DE8C041}");
+	DWORD dwErr = GetLastError();
+	if (g_Maxmux == NULL || dwErr == ERROR_ALREADY_EXISTS)
+	{
+		if (g_Maxmux != NULL)
+		{
+			CloseHandle(g_Maxmux);
+			g_Maxmux = NULL;
+		}
+		return FALSE;
+	}
+
 
 	Gdiplus::GdiplusStartup(&m_gdiplusToken, &m_gdiplusStartupInput, NULL);
 
@@ -43,7 +62,7 @@ BOOL CYOLOToolApp::InitInstance()
 	CYOLOToolDlg dlg;
 	m_pMainWnd = &dlg;
 	dlg.DoModal();
-
+	CloseHandle(g_Maxmux);
 	return FALSE;
 }
 
