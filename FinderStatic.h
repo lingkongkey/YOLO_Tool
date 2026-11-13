@@ -10,19 +10,18 @@ class CFinderStatic : public CStatic
 {
 public:
 	CFinderStatic();
-
+	HWND  m_Game_hWnd;
+	DWORD m_Game_tid;
+	DWORD m_Game_pid;
+	DWORD m_BackColor = RGB(0x6c, 0xe2, 0x6c); 
+	RECT rc;
 protected:
-	afx_msg void OnPaint();
 	afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
-	afx_msg void OnMouseMove(UINT nFlags, CPoint point);
+	
 	afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	DECLARE_MESSAGE_MAP()
 
-private:
-	
-	void HighlightWindow(HWND hwnd);
-
-	bool    m_bCapturing;  
-	HWND    m_hwndHover;   
-	HCURSOR m_hCross;      
+  
+	    
 };

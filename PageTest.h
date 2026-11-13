@@ -59,12 +59,15 @@ protected:
 	void LoadResultImage();
 
 	CPreviewStatic  m_wndPreview;      
-	CFinderStatic   m_wndFinder;       
+      
 	CString         m_strResultPath;   
 	ULONGLONG       m_ullResultTime;   
 	bool            m_bRunning;        
 	bool            m_bInitializing;   
-	HWND            m_hwndTarget;      
+	HWND            m_hwndTarget;    
+	WNDPROC         m_lpOldProc;
 public:
 	afx_msg BOOL OnHelpInfo(HELPINFO* pHelpInfo);
+	CFinderStatic m_Gethwnd;
+	afx_msg void OnClose();
 };

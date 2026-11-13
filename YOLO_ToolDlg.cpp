@@ -252,6 +252,7 @@ BOOL CYOLOToolDlg::OnHelpInfo(HELPINFO* pHelpInfo)
 	return 1;
 }
 
+extern BOOL g_starico1;
 
 void CYOLOToolDlg::OnClose()
 {
@@ -274,7 +275,8 @@ void CYOLOToolDlg::OnClose()
 			return;
 		}
 	}
-
+	g_starico1 = FALSE;
+	Sleep(150);
 	m_bExiting = true;
 	m_pageAnnotate.SaveConfig();
 	CAppConfig::Instance().SaveAll();

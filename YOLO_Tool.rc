@@ -60,6 +60,10 @@ END
 // remains consistent on all systems.
 IDR_MAINFRAME           ICON                    "res\\lwsoftexe.ico"
 
+IDI_ICON1               ICON                    "res\\drag.ico"
+
+IDI_ICON2               ICON                    "res\\drag2.ico"
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -83,11 +87,11 @@ BEGIN
     LTEXT           "句柄:",IDC_LBL_HANDLE,16,24,26,10
     EDITTEXT        IDC_EDIT_HANDLE,44,22,66,13,ES_AUTOHSCROLL
     PUSHBUTTON      "查看标题",IDC_BTN_CHECK,116,21,44,15
-    LTEXT           "",IDC_FINDER,168,18,24,24,SS_NOTIFY | SS_SUNKEN | NOT WS_GROUP
-    LTEXT           "按住准星拖到目标窗口",IDC_LBL_FINDER_TIP,198,24,71,10
+    LTEXT           "",IDC_FINDER,168,13,43,24,SS_NOTIFY | SS_SUNKEN | NOT WS_GROUP
+    LTEXT           "按住准星拖到目标窗口",IDC_LBL_FINDER_TIP,170,43,71,10
     LTEXT           "窗口标题:",IDC_LBL_TITLE,16,46,40,10
     EDITTEXT        IDC_EDIT_TITLE,58,44,103,13,ES_AUTOHSCROLL | ES_READONLY
-    CONTROL         "仅截客户区",IDC_CHK_CLIENT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,170,47,66,10
+    CONTROL         "仅截客户区",IDC_CHK_CLIENT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,170,54,66,10
     GROUPBOX        "截图设置",IDC_GRP_SNAP,281,18,364,25
     LTEXT           "间隔(毫秒):",IDC_LBL_INTERVAL,290,27,52,10
     EDITTEXT        IDC_EDIT_INTERVAL,346,24,46,13,ES_NUMBER
@@ -182,15 +186,14 @@ IDD_PAGE_TEST DIALOGEX 0, 0, 792, 421
 STYLE DS_SETFONT | DS_CONTROL | WS_CHILD
 FONT 9, "微软雅黑", 400, 0, 0x86
 BEGIN
-    LTEXT           "模型:",IDC_LBL_TEST_MODEL,8,10,24,10
-    COMBOBOX        IDC_COMBO_TEST_MODEL,36,8,300,120,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "输入尺寸:",IDC_LBL_TEST_IMGSZ,348,10,44,10
-    EDITTEXT        IDC_EDIT_TEST_IMGSZ,396,8,50,13,ES_NUMBER
-    PUSHBUTTON      "打开",IDC_BTN_TEST_OPEN,454,8,48,16
-    PUSHBUTTON      "刷新",IDC_BTN_TEST_REFRESH,508,8,48,16
-    LTEXT           "",IDC_FINDER_TEST,8,30,20,20,SS_NOTIFY | SS_SUNKEN | NOT WS_GROUP
-    LTEXT           "窗口句柄:",IDC_LBL_TEST_HANDLE,36,34,44,10
-    EDITTEXT        IDC_EDIT_TEST_HANDLE,84,32,90,13,ES_AUTOHSCROLL
+    LTEXT           "模型:",IDC_LBL_TEST_MODEL,49,10,18,10
+    COMBOBOX        IDC_COMBO_TEST_MODEL,68,8,300,120,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "输入尺寸:",IDC_LBL_TEST_IMGSZ,380,10,44,10
+    EDITTEXT        IDC_EDIT_TEST_IMGSZ,428,8,50,13,ES_NUMBER
+    PUSHBUTTON      "打开",IDC_BTN_TEST_OPEN,486,8,48,16
+    PUSHBUTTON      "刷新",IDC_BTN_TEST_REFRESH,540,8,48,16
+    LTEXT           "窗口句柄:",IDC_LBL_TEST_HANDLE,52,28,31,10
+    EDITTEXT        IDC_EDIT_TEST_HANDLE,84,26,90,13,ES_AUTOHSCROLL
     PUSHBUTTON      "检测",IDC_BTN_TEST_DETECT,184,30,64,18
     PUSHBUTTON      "图片验证",IDC_BTN_TEST_IMAGE,248,30,64,18
     LTEXT           "置信度:",IDC_LBL_TEST_CONF,378,34,38,10
@@ -200,6 +203,7 @@ BEGIN
     RTEXT           "自适应",IDC_STATIC_TEST_ZOOM,671,35,44,10
     LTEXT           "",IDC_PREVIEW_TEST,8,54,776,350,SS_NOTIFY | SS_SUNKEN | NOT WS_GROUP
     LTEXT           "就绪",IDC_STATIC_TEST_STATUS,8,410,776,10
+    ICON            IDI_ICON1,IDC_FINDER_TEST,15,13,18,15
 END
 
 IDD_CLOSE_CHOICE DIALOGEX 0, 0, 240, 116
@@ -324,6 +328,14 @@ IDD_PAGE_TEST AFX_DIALOG_LAYOUT
 BEGIN
     0
 END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Cursor
+//
+
+IDC_CURSOR1             CURSOR                  "res\\eye.cur"
 
 #endif    // 中文(简体，中国) resources
 /////////////////////////////////////////////////////////////////////////////

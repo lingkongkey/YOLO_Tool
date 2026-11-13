@@ -255,7 +255,12 @@
     <ResourceCompile Include="YOLO_Tool.rc" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="res\drag.ico" />
+    <Image Include="res\drag2.ico" />
     <Image Include="res\lwsoftexe.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="res\eye.cur" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

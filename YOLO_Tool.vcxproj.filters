@@ -132,5 +132,16 @@
     <Image Include="res\lwsoftexe.ico">
       <Filter>资源文件</Filter>
     </Image>
+    <Image Include="res\drag.ico">
+      <Filter>资源文件</Filter>
+    </Image>
+    <Image Include="res\drag2.ico">
+      <Filter>资源文件</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="res\eye.cur">
+      <Filter>资源文件</Filter>
+    </None>
   </ItemGroup>
 </Project>

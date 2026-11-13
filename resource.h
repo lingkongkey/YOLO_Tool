@@ -9,6 +9,9 @@
 #define IDD_PAGE_TRAIN                  202
 #define IDD_PAGE_TEST                   203
 #define IDD_CLOSE_CHOICE                204
+#define IDI_ICON1                       205
+#define IDI_ICON2                       206
+#define IDC_CURSOR1                     207
 #define IDC_EDIT_HANDLE                 1000
 #define IDC_BTN_CHECK                   1001
 #define IDC_FINDER                      1002
@@ -126,9 +129,9 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        205
+#define _APS_NEXT_RESOURCE_VALUE        208
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1204
+#define _APS_NEXT_CONTROL_VALUE         1205
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
