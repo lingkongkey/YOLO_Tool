@@ -40,8 +40,6 @@
 CComboBox* g_pComboTEST = 0;
 CPageTest* g_CPageTest=0;
 
-CWnd* g_CWnd= 0;
-
 namespace
 {
 	const UINT kPwRenderFullContent = 0x00000002;
@@ -681,78 +679,7 @@ void CPageTest::DoDataExchange(CDataExchange* pDX)
 
 	DDX_Control(pDX, IDC_FINDER_TEST, m_Gethwnd);
 }
-BOOL  g_icotest = FALSE;
-BOOL  g_icotest_1 = FALSE;
-WNDPROC         g_lpOldProc;
 
-
-
-LRESULT CALLBACK WNDPROCICO(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-	switch (msg)
-	{
-	case WM_LBUTTONDOWN:
-	{
-		if (g_icotest_1 == FALSE)
-		{
-			g_icotest_1 = TRUE;
-			SetCapture(hWnd);
-			HCURSOR hc = AfxGetApp()->LoadCursor(IDC_CURSOR1);
-			::SetCursor(hc);
-			HICON hIcon = AfxGetApp()->LoadIcon(IDI_ICON2);
-			::InvalidateRect(hWnd, NULL, TRUE);
-		}
-		break;
-	}
-	case WM_LBUTTONUP:
-	{
-		if (g_icotest_1 == TRUE)
-		{
-			g_icotest = FALSE;
-			g_icotest_1 = FALSE;
-			ReleaseCapture();
-			::InvalidateRect(hWnd, NULL, TRUE);
-			POINT pt;
-			GetCursorPos(&pt);
-			HWND hw = WindowFromPoint(pt);
-			if (hw)
-			{
-				DWORD pidWnd;
-				GetWindowThreadProcessId(hw, &pidWnd);
-				DWORD pidSelf = GetCurrentProcessId();
-				if (pidWnd != pidSelf)
-				{
-					PostMessage(g_CPageTest->m_hWnd, WM_FINDER_PICKED, (WPARAM)hw, 0);
-				}
-			}
-			
-		}
-		break;
-	}
-	case WM_PAINT:
-	{
-		PAINTSTRUCT ps;
-		HDC dc = BeginPaint(hWnd, &ps);
-		if (g_icotest_1)
-		{
-			HICON hIcon = AfxGetApp()->LoadIcon(IDI_ICON2);
-			DrawIcon(dc, 0, 0, hIcon);
-		}
-		else
-		{
-			HICON hIcon = AfxGetApp()->LoadIcon(IDI_ICON1);
-			DrawIcon(dc, 0, 0, hIcon);
-		}
-		EndPaint(hWnd, &ps);
-		return 0;
-	}
-
-	
-	default:
-		break;
-	}
-	return CallWindowProc(g_lpOldProc, hWnd, msg, wParam, lParam);
-}
 
 
 BEGIN_MESSAGE_MAP(CPageTest, CDialogEx)
@@ -767,64 +694,24 @@ BEGIN_MESSAGE_MAP(CPageTest, CDialogEx)
 	ON_WM_CLOSE()
 END_MESSAGE_MAP()
 
-BOOL g_starico1 = TRUE;
-DWORD WINAPI starico1(LPVOID lpTh)
-{
 
-	while (g_starico1)
-	{
-		if (g_icotest == FALSE)
-		{
-			POINT pt;
-			GetCursorPos(&pt);
-			ScreenToClient(g_CWnd->m_hWnd, &pt);
-			
-			CRect icorect = { 0 };
-			g_CWnd->GetWindowRect(icorect);
-			if (abs(pt.x- icorect.Width())< icorect.Width() && abs(pt.y-icorect.Height())< icorect.Height() && (::GetKeyState(VK_LBUTTON) & 0x8000) != 0)
-			{
-				PostMessageA(g_CWnd->m_hWnd, WM_LBUTTONDOWN, 0, 0);
-				g_icotest = TRUE;
-			}
-		}
-		
-
-		if (g_icotest)
-		{
-			if ((::GetKeyState(VK_LBUTTON) & 0x8000) == 0)
-			{
-				PostMessageA(g_CWnd->m_hWnd, WM_LBUTTONUP, 0, 0);
-				g_icotest = FALSE;
-			}
-		}
-		Sleep(100);
-	}
-	g_icotest = FALSE;
-	
-	return 0;
-}
 
 BOOL CPageTest::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
 
-	g_CWnd = GetDlgItem(IDC_FINDER_TEST);
-	if (g_CWnd)
+	HWND hIcoWnd = ::GetDlgItem(GetSafeHwnd(), IDC_FINDER_TEST);
+	if (hIcoWnd != NULL)
 	{
-		m_lpOldProc = (WNDPROC)GetWindowLongPtrW(g_CWnd->m_hWnd, GWLP_WNDPROC);
-		if (m_lpOldProc)
-		{
-			SetWindowLongPtr(g_CWnd->m_hWnd ,GWLP_WNDPROC, (LONG_PTR)WNDPROCICO);
-			LONG style = GetWindowLongPtr(g_CWnd->m_hWnd, GWL_STYLE);
-			SetWindowLongPtr(g_CWnd->m_hWnd, GWL_STYLE, style | SS_NOTIFY);
-		}
-		
-		CloseHandle(CreateThread(NULL, 0, starico1, 0, 0, 0));
 
+			
+			LONG style = GetWindowLongPtr(hIcoWnd, GWL_STYLE);
+			SetWindowLongPtr(hIcoWnd, GWL_STYLE, style | SS_NOTIFY);
+		
 	}
 	
-
 	g_CPageTest = this;
+
 	SetDlgItemText(IDC_EDIT_TEST_IMGSZ, _T("640"));
 	SetDlgItemText(IDC_EDIT_TEST_CONF, _T("0.25"));
 	SetDlgItemText(IDC_EDIT_TEST_IOU, _T("0.45"));
@@ -857,12 +744,12 @@ BOOL CPageTest::OnInitDialog()
 
 BOOL CPageTest::PreTranslateMessage(MSG* pMsg)
 {
-	
-	if (pMsg->message== WM_FINDER_PICKED)
-	{
-		OnFinderPicked(pMsg->wParam,0);
-	}
-	
+	if (UiForwardEditPaste(pMsg))
+		return TRUE;
+
+	if (UiSwallowDialogKey(pMsg))
+		return TRUE;
+
 	return CDialogEx::PreTranslateMessage(pMsg);
 }
 
@@ -1486,5 +1373,5 @@ void CPageTest::OnClose()
 {
 	// TODO: 在此添加消息处理程序代码和/或调用默认值
 
-	g_starico1 = FALSE;
+
 }

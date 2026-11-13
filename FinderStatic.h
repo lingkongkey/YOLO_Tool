@@ -13,7 +13,7 @@ public:
 	HWND  m_Game_hWnd;
 	DWORD m_Game_tid;
 	DWORD m_Game_pid;
-	DWORD m_BackColor = RGB(0x6c, 0xe2, 0x6c); 
+	DWORD m_BackColor = RGB(0, 0xFF, 0);
 	RECT rc;
 protected:
 	afx_msg void OnLButtonDown(UINT nFlags, CPoint point);

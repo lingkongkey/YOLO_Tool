@@ -65,7 +65,6 @@ protected:
 	bool            m_bRunning;        
 	bool            m_bInitializing;   
 	HWND            m_hwndTarget;    
-	WNDPROC         m_lpOldProc;
 public:
 	afx_msg BOOL OnHelpInfo(HELPINFO* pHelpInfo);
 	CFinderStatic m_Gethwnd;

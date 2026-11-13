@@ -35,7 +35,21 @@ void CFinderStatic::OnLButtonUp(UINT nFlags, CPoint point)
 	HICON hIcon = LoadIcon(AfxGetApp()->m_hInstance, MAKEINTRESOURCE(IDI_ICON1));
 	this->SetIcon(hIcon);
 	KillTimer(1);
+	if (m_Game_hWnd)
+	{
+		DWORD pidWnd;
+		GetWindowThreadProcessId(m_Game_hWnd, &pidWnd);
+		DWORD pidSelf = GetCurrentProcessId();
+		if (pidWnd != pidSelf)
+		{
 			GetParent()->SendMessage(WM_FINDER_PICKED, (WPARAM)m_Game_hWnd, 0);
+		}
+		else
+		{
+			GetParent()->SendMessage(WM_FINDER_PICKED, (WPARAM)0, 0);
+		}
+		
+	}
 	
 	CStatic::OnLButtonUp(nFlags, point);
 }
@@ -97,7 +111,7 @@ void CFinderStatic::OnTimer(UINT_PTR nIDEvent)
 	if (mRect.left < 0) mRect.left = 0;
 	if (mRect.top < 0) mRect.top = 0;
 
-	HPEN newPen = ::CreatePen(0, 3, RGB(125, 0, 125));
+	HPEN newPen = ::CreatePen(0, 3, m_BackColor);
 	HGDIOBJ oldPen = ::SelectObject(deskDC, newPen);
 
 	::Rectangle(deskDC, mRect.left, mRect.top, mRect.right, mRect.bottom);

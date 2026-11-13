@@ -74,6 +74,16 @@ BOOL CPageCapture::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
 
+	HWND hIcoWnd = ::GetDlgItem(GetSafeHwnd(), IDC_FINDER);
+	if (hIcoWnd != NULL)
+	{
+
+
+		LONG style = GetWindowLongPtr(hIcoWnd, GWL_STYLE);
+		SetWindowLongPtr(hIcoWnd, GWL_STYLE, style | SS_NOTIFY);
+
+	}
+
 	CSpinButtonCtrl* pSpin = (CSpinButtonCtrl*)GetDlgItem(IDC_SPIN_INTERVAL);
 	if (pSpin != NULL)
 		pSpin->SetRange32(100, 600000);
@@ -669,6 +679,13 @@ void CPageCapture::OnBnClickedBtnCheck()
 LRESULT CPageCapture::OnFinderPicked(WPARAM wParam, LPARAM /*lParam*/)
 {
 	m_hwndTarget = (HWND)wParam;
+	if (wParam==0)
+	{
+		SetDlgItemText(IDC_EDIT_HANDLE, L"");
+		UpdateTargetTitle();
+		return 0;
+	}
+	
 
 	CString strHandle;
 	strHandle.Format(_T("%08X"), (DWORD)(DWORD_PTR)m_hwndTarget);
