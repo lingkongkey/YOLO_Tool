@@ -1015,7 +1015,9 @@ void CPageAnnotate::Layout()
 	mv(IDC_EDIT_CONF, rightX + 62, py + 76, 64, 21);
 
 	mv(IDC_BTN_ANNOTATE, rightX + 25, py + 108, RIGHTW - 80, 26);
-	mv(IDC_BTN_LABELIMG, rightX + 25, py + 140, RIGHTW - 60, 26);
+	;
+	mv(IDC_CHK_ANN_GPU, rightX +6, py + 140, RIGHTW - 96, 26);
+	mv(IDC_BTN_LABELIMG, rightX + 53, py + 140, RIGHTW - 70, 26);
 
 
 	int ly = py + 176 + GAP;
@@ -2617,13 +2619,16 @@ void CPageAnnotate::GetPtPath()
 
 void CPageAnnotate::OnBnClickedBtnLabelImg()
 {
-	CString strGreen = GetGreenRoot();
-	CString strPython = GetGreenPython();
+	bool bGpu = (IsDlgButtonChecked(IDC_CHK_ANN_GPU) == BST_CHECKED);
+	CString strGreen = bGpu ? GetGreenGpuRoot() : GetGreenRoot();
+	CString strPython = bGpu ? GetGreenGpuPython() : GetGreenPython();
 	if (strGreen.IsEmpty() || strPython.IsEmpty())
 	{
-		AfxMessageBox(_T("未找到 YOLO_Green 绿色包或 python.exe。"), MB_ICONWARNING);
+		AfxMessageBox(bGpu ? _T("未找到 YOLO_Green_GPU 绿色包或 python.exe。")
+			: _T("未找到 YOLO_Green 绿色包或 python.exe。"), MB_ICONWARNING);
 		return;
 	}
+	LPCTSTR pszDevice = bGpu ? _T("0") : _T("cpu");
 
 	CComboBox* pCombo = (CComboBox*)GetDlgItem(IDC_COMBO_WEIGHTS_ANN);
 	CString strWeights;
@@ -2708,10 +2713,10 @@ void CPageAnnotate::OnBnClickedBtnLabelImg()
 	}
 
 	CString strCmd;
-	strCmd.Format(_T("\"%s\" -X utf8 -u \"%s\" --imgs \"%s\" --weights \"%s\" --conf %s"),
-		(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strImgs, (LPCTSTR)strWeightsPath, (LPCTSTR)strConf);
+	strCmd.Format(_T("\"%s\" -X utf8 -u \"%s\" --imgs \"%s\" --weights \"%s\" --conf %s --device %s"),
+		(LPCTSTR)strPython, (LPCTSTR)strScript, (LPCTSTR)strImgs, (LPCTSTR)strWeightsPath, (LPCTSTR)strConf, pszDevice);
 
-	AppendLog(_T("==== 开始预标注 ====\r\n") + strCmd + _T("\r\n"));
+	AppendLog((bGpu ? _T("==== 开始预标注 (GPU) ====\r\n") : _T("==== 开始预标注 (CPU) ====\r\n")) + strCmd + _T("\r\n"));
 
 	if (!m_capture.StartProcess(strCmd, GetSafeHwnd()))
 	{

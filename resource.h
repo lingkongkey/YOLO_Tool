@@ -124,6 +124,7 @@
 #define IDC_LBL_EPOCHS2                 1203
 #define IDC_BTN_AI_ANNOTATE2            1204
 #define IDC_GRP_SNAP2                   1205
+#define IDC_CHK_ANN_GPU                 1206
 
 // Next default values for new objects
 // 
@@ -131,7 +132,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        208
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1205
+#define _APS_NEXT_CONTROL_VALUE         1207
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
