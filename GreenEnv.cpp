@@ -700,6 +700,7 @@ void RemoveProjectImageAt(int nIndex)
 
 static std::mutex g_mtxGpuProbe;
 static int      g_nGpuProbeState = 0;   // 0 未探测, 1 可用, 2 不可用
+static int      g_nGpuProbeResult = GPU_PROBE_UNKNOWN;
 static CString  g_strGpuProbeReason;
 static CString  g_strGpuProbeName;
 static CString  g_strGpuActiveRoot;      // 探测通过的 GPU 环境根目录
@@ -912,6 +913,7 @@ bool IsGpuUsable(CString* pReason, CString* pDeviceName)
 	if (g_nGpuProbeState == 0)
 	{
 		int nState = 2;
+		int nResult = GPU_PROBE_FAIL;
 		CString strReason;
 		CString strName;
 		CString strArchFail;
@@ -923,6 +925,7 @@ bool IsGpuUsable(CString* pReason, CString* pDeviceName)
 
 		if (arrRoots.GetSize() == 0)
 		{
+			nResult = GPU_PROBE_NO_ENV;
 			strReason = _T("未找到可用的 GPU 绿色包");
 		}
 		else if (strScript.IsEmpty())
@@ -936,18 +939,19 @@ bool IsGpuUsable(CString* pReason, CString* pDeviceName)
 			{
 				CString strRoot = arrRoots[i];
 				CString strProbeName, strDetail;
-				int nResult = RunGpuProbe(GetEnvPython(strRoot), strScript,
+				int nProbe = RunGpuProbe(GetEnvPython(strRoot), strScript,
 					strProbeName, strDetail);
 
-				if (nResult == 1)
+				if (nProbe == 1)
 				{
 					nState = 1;
+					nResult = GPU_PROBE_OK;
 					strName = strProbeName;
 					strReason = strDetail;
 					g_strGpuActiveRoot = strRoot;
 					break;
 				}
-				if (nResult == 2)
+				if (nProbe == 2)
 				{
 					CString strCap = strDetail;
 					int nSep = strDetail.Find(_T('|'));
@@ -964,10 +968,14 @@ bool IsGpuUsable(CString* pReason, CString* pDeviceName)
 			}
 
 			if (nState != 1 && !strArchFail.IsEmpty())
+			{
 				strReason = strArchFail;
+				nResult = GPU_PROBE_ARCH;
+			}
 		}
 
 		g_nGpuProbeState = nState;
+		g_nGpuProbeResult = nResult;
 		g_strGpuProbeReason = strReason;
 		g_strGpuProbeName = strName;
 	}
@@ -988,10 +996,17 @@ CString GetGpuEnvRoot()
 	return g_strGpuActiveRoot;
 }
 
+GpuProbeResult GetGpuProbeResult()
+{
+	std::lock_guard<std::mutex> lock(g_mtxGpuProbe);
+	return (GpuProbeResult)g_nGpuProbeResult;
+}
+
 void InvalidateGpuProbe()
 {
 	std::lock_guard<std::mutex> lock(g_mtxGpuProbe);
 	g_nGpuProbeState = 0;
+	g_nGpuProbeResult = GPU_PROBE_UNKNOWN;
 	g_strGpuProbeReason.Empty();
 	g_strGpuProbeName.Empty();
 	g_strGpuActiveRoot.Empty();

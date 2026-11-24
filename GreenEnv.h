@@ -25,6 +25,19 @@ CString GetGpuEnvRoot();
 // 返回 true 表示可以放心用 GPU 训练/预标注；false 时 pReason 给出原因。
 bool IsGpuUsable(CString* pReason = nullptr, CString* pDeviceName = nullptr);
 
+// GPU 探测结果分类
+enum GpuProbeResult
+{
+	GPU_PROBE_UNKNOWN = 0,
+	GPU_PROBE_OK = 1,
+	GPU_PROBE_NO_ENV = 2,   // 有显卡但没有 GPU 绿色包
+	GPU_PROBE_ARCH = 3,     // 显卡算力不被现有 GPU 包支持
+	GPU_PROBE_FAIL = 4,     // 其他原因（驱动过旧、计算失败等）
+};
+
+// 上一次探测的结果分类，供界面决定提示下载哪种环境包
+GpuProbeResult GetGpuProbeResult();
+
 // 清除探测缓存，下次调用重新探测
 void InvalidateGpuProbe();
 

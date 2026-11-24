@@ -5,11 +5,13 @@
 #include "YOLO_Tool.h"
 #include "PageTrain.h"
 #include "GreenEnv.h"
+#include "EnvDownloader.h"
 #include "UiUtil.h"
 #include "AppConfig.h"
 #include "afxdialogex.h"
 #include <shlwapi.h>
 #include <vector>
+#include <memory>
 #include "PageAnnotate.h"
 
 #include "File/zlib/zlib.h"
@@ -163,6 +165,79 @@ static UINT AFX_CDECL GpuProbeThreadProc(LPVOID pParam)
 	return 0;
 }
 
+// ===== 环境包按需下载 =====
+
+struct EnvDownloadTask
+{
+	HWND    hWnd;
+	CString strName;
+};
+
+static void EnvProgressCallback(int nPercent, int nPhase, LPVOID pUser)
+{
+	HWND hWnd = (HWND)pUser;
+	if (::IsWindow(hWnd))
+		::PostMessage(hWnd, WM_USER_ENV_PROGRESS, (WPARAM)nPercent, (LPARAM)nPhase);
+}
+
+static UINT AFX_CDECL EnvDownloadThreadProc(LPVOID pParam)
+{
+	std::unique_ptr<EnvDownloadTask> pTask((EnvDownloadTask*)pParam);
+
+	CString strErr;
+	bool bOk = DownloadAndInstallEnv(pTask->strName, EnvProgressCallback,
+		pTask->hWnd, strErr);
+
+	CString* pErrText = new CString(strErr);
+	if (!::IsWindow(pTask->hWnd) ||
+		!::PostMessage(pTask->hWnd, WM_USER_ENV_DONE, bOk ? 1 : 0, (LPARAM)pErrText))
+		delete pErrText;
+
+	return 0;
+}
+
+void CPageTrain::PromptDownloadEnv(LPCTSTR lpszName, LPCTSTR lpszWhy)
+{
+	if (m_bEnvDownloading)
+		return;
+
+	CString strSize = _T("大小未知");
+	EnvPackageInfo info;
+	if (FindEnvPackage(lpszName, info) && info.nSize > 0)
+		strSize.Format(_T("约 %.1f GB"), info.nSize / 1073741824.0);
+
+	CString strMsg;
+	strMsg.Format(_T("%s。\n\n是否现在自动下载并安装 %s？\n下载%s，需要联网，下载期间请勿关闭程序。"),
+		lpszWhy, lpszName, (LPCTSTR)strSize);
+
+	if (AfxMessageBox(strMsg, MB_ICONQUESTION | MB_YESNO) != IDYES)
+	{
+		AppendLog(_T("未下载运行环境包，训练所需的 Python 环境暂不可用。\r\n"));
+		return;
+	}
+
+	StartEnvDownload(lpszName);
+}
+
+void CPageTrain::StartEnvDownload(LPCTSTR lpszName)
+{
+	if (m_bEnvDownloading)
+		return;
+
+	m_bEnvDownloading = true;
+	m_strEnvDownloadName = lpszName;
+
+	CString strLog;
+	strLog.Format(_T("==== 开始下载运行环境包 %s ====\r\n"), lpszName);
+	AppendLog(strLog);
+	SetStatus(_T("正在下载运行环境包…"));
+
+	EnvDownloadTask* pTask = new EnvDownloadTask;
+	pTask->hWnd = GetSafeHwnd();
+	pTask->strName = lpszName;
+	AfxBeginThread(EnvDownloadThreadProc, pTask, THREAD_PRIORITY_BELOW_NORMAL, 0, 0, NULL);
+}
+
 CPageTrain::CPageTrain(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_PAGE_TRAIN, pParent)
 	, m_ptArr(ProjectWeights())
@@ -180,6 +255,9 @@ BEGIN_MESSAGE_MAP(CPageTrain, CDialogEx)
 	ON_MESSAGE(WM_USER_RECVLOG, &CPageTrain::OnRecvLog)
 	ON_MESSAGE(WM_USER_PROC_EXIT, &CPageTrain::OnProcExit)
 	ON_MESSAGE(WM_USER_GPU_PROBE, &CPageTrain::OnGpuProbeDone)
+	ON_MESSAGE(WM_USER_ENV_PROMPT, &CPageTrain::OnEnvPrompt)
+	ON_MESSAGE(WM_USER_ENV_PROGRESS, &CPageTrain::OnEnvProgress)
+	ON_MESSAGE(WM_USER_ENV_DONE, &CPageTrain::OnEnvDone)
 	ON_WM_HELPINFO()
 	ON_WM_CTLCOLOR()
 	ON_CBN_SELCHANGE(IDC_COMBO_EXPORT_FMT2, &CPageTrain::OnCbnSelchangeComboExportFmt2)
@@ -210,9 +288,18 @@ BOOL CPageTrain::OnInitDialog()
 	GetDlgItem(IDC_BTN_TRAIN_STOP)->EnableWindow(FALSE);
 
 	CheckDlgButton(IDC_CHK_GPU, BST_UNCHECKED);
+
+	// 缺少基础 CPU 环境包时训练完全无法进行，优先提示下载
+	bool bHasBaseEnv = !GetGreenRoot().IsEmpty();
+	if (!bHasBaseEnv)
+		PostMessage(WM_USER_ENV_PROMPT, 0, 0);
+
 	if (!HasAnyGpuEnv())
 	{
 		GetDlgItem(IDC_CHK_GPU)->EnableWindow(FALSE);
+		// 有 NVIDIA 显卡但还没有 GPU 加速包时，提示可下载（wParam=1）
+		if (bHasBaseEnv && HasNvidiaDriver())
+			PostMessage(WM_USER_ENV_PROMPT, 1, 0);
 	}
 	else
 	{
@@ -629,6 +716,12 @@ void CPageTrain::FillExportFormats()
 
 void CPageTrain::OnBnClickedBtnTrainStart()
 {
+	if (m_bEnvDownloading)
+	{
+		AfxMessageBox(_T("正在下载运行环境包，请等下载安装完成后再开始训练。"), MB_ICONINFORMATION);
+		return;
+	}
+
 	Invalidate();
 	UpdateWindow();
 
@@ -1236,14 +1329,102 @@ LRESULT CPageTrain::OnGpuProbeDone(WPARAM /*wParam*/, LPARAM /*lParam*/)
 		pChk->EnableWindow(FALSE);
 		strLog.Format(_T("==== GPU 不可用：%s，已自动使用 CPU 训练 ====\r\n"),
 			(LPCTSTR)strReason);
+		AppendLog(strLog);
+
+		// 显卡本身没问题、只是现有包装不下这个算力时，提示下载 CU128 包
+		if (GetGpuProbeResult() == GPU_PROBE_ARCH && !m_bEnvDownloading &&
+			!IsEnvInstalled(_T("YOLO_Green_GPU_CU128")))
+		{
+			PromptDownloadEnv(_T("YOLO_Green_GPU_CU128"),
+				_T("当前显卡较新，现有 GPU 加速包不支持它的算力"));
+		}
+		return 0;
+	}
+
+	pChk->EnableWindow(m_capture.IsRunning() ? FALSE : TRUE);
+	strLog.Format(_T("==== 已检测到 GPU：%s（%s）====\r\n"),
+		(LPCTSTR)strName, (LPCTSTR)strReason);
+	AppendLog(strLog);
+	return 0;
+}
+
+LRESULT CPageTrain::OnEnvPrompt(WPARAM wParam, LPARAM /*lParam*/)
+{
+	if (wParam == 0)
+	{
+		PromptDownloadEnv(_T("YOLO_Green"),
+			_T("缺少基础运行环境 YOLO_Green（CPU 版 Python 环境），没有它无法训练"));
 	}
 	else
 	{
-		pChk->EnableWindow(m_capture.IsRunning() ? FALSE : TRUE);
-		strLog.Format(_T("==== 已检测到 GPU：%s（%s）====\r\n"),
-			(LPCTSTR)strName, (LPCTSTR)strReason);
+		PromptDownloadEnv(_T("YOLO_Green_GPU"),
+			_T("检测到 NVIDIA 显卡，可以再安装 GPU 加速包来加快训练和预标注"));
 	}
-	AppendLog(strLog);
+	return 0;
+}
+
+LRESULT CPageTrain::OnEnvProgress(WPARAM wParam, LPARAM lParam)
+{
+	int nPercent = (int)wParam;
+	int nPhase = (int)lParam;
+
+	CString strStatus;
+	if (nPhase == 0)
+	{
+		if (nPercent < 0)
+			strStatus = _T("正在下载运行环境包…");
+		else
+			strStatus.Format(_T("正在下载运行环境包… %d%%"), nPercent);
+	}
+	else if (nPhase == 1)
+	{
+		strStatus = _T("正在校验运行环境包…");
+	}
+	else
+	{
+		strStatus = _T("正在解压运行环境包…");
+	}
+	SetStatus(strStatus);
+	return 0;
+}
+
+LRESULT CPageTrain::OnEnvDone(WPARAM wParam, LPARAM lParam)
+{
+	std::unique_ptr<CString> pErrText((CString*)lParam);
+	bool bOk = (wParam != 0);
+	m_bEnvDownloading = false;
+
+	if (!bOk)
+	{
+		CString strLog;
+		strLog.Format(_T("==== 运行环境包安装失败：%s ====\r\n"),
+			pErrText ? (LPCTSTR)*pErrText : _T("未知原因"));
+		AppendLog(strLog);
+		SetStatus(_T("环境包安装失败"));
+		return 0;
+	}
+
+	AppendLog(_T("==== 运行环境包安装完成 ====\r\n"));
+	SetStatus(_T("环境包安装完成"));
+
+	// 环境变了：清掉探测缓存，重新找权重、重新探测显卡
+	InvalidateGpuProbe();
+	m_bGpuProbeDone = false;
+	m_bGpuUsable = false;
+	FillWeightsCombo();
+
+	CWnd* pChk = GetDlgItem(IDC_CHK_GPU);
+	if (HasAnyGpuEnv())
+	{
+		if (pChk)
+			pChk->EnableWindow(TRUE);
+		AfxBeginThread(GpuProbeThreadProc, GetSafeHwnd(),
+			THREAD_PRIORITY_BELOW_NORMAL, 0, 0, NULL);
+	}
+	else if (pChk)
+	{
+		pChk->EnableWindow(FALSE);
+	}
 	return 0;
 }
 

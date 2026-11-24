@@ -6,6 +6,9 @@
 #include "LogCapture.h"
 
 #define WM_USER_GPU_PROBE (WM_USER + 102)
+#define WM_USER_ENV_PROMPT (WM_USER + 103)    // 提示下载运行环境包
+#define WM_USER_ENV_PROGRESS (WM_USER + 104)  // 环境包下载进度
+#define WM_USER_ENV_DONE (WM_USER + 105)      // 环境包安装结束
 
 class CPageTrain : public CDialogEx
 {
@@ -75,6 +78,13 @@ protected:
 	afx_msg LRESULT OnGpuProbeDone(WPARAM wParam, LPARAM lParam);
 	bool m_bGpuProbeDone = false;   // 后台探测是否已结束
 	bool m_bGpuUsable = false;      // 探测结果：GPU 是否真的能跑
+	afx_msg LRESULT OnEnvPrompt(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnEnvProgress(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnEnvDone(WPARAM wParam, LPARAM lParam);
+	void PromptDownloadEnv(LPCTSTR lpszName, LPCTSTR lpszWhy);
+	void StartEnvDownload(LPCTSTR lpszName);
+	bool m_bEnvDownloading = false;
+	CString m_strEnvDownloadName;
 public:
 	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
 	afx_msg void OnCbnSelchangeComboExportFmt2();

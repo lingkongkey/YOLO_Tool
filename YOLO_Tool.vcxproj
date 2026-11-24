@@ -222,6 +222,7 @@
     <ClInclude Include="FinderStatic.h" />
     <ClInclude Include="PreviewStatic.h" />
     <ClInclude Include="GreenEnv.h" />
+    <ClInclude Include="EnvDownloader.h" />
     <ClInclude Include="PageCapture.h" />
     <ClInclude Include="PageAnnotate.h" />
     <ClInclude Include="PageTrain.h" />
@@ -245,6 +246,7 @@
     <ClCompile Include="FinderStatic.cpp" />
     <ClCompile Include="PreviewStatic.cpp" />
     <ClCompile Include="GreenEnv.cpp" />
+    <ClCompile Include="EnvDownloader.cpp" />
     <ClCompile Include="PageCapture.cpp" />
     <ClCompile Include="AnnotateCanvas.cpp" />
     <ClCompile Include="PageAnnotate.cpp" />
