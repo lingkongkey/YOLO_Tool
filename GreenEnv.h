@@ -12,6 +12,15 @@ CString GetGreenGpuRoot();
 
 CString GetGreenGpuPython();
 
+// 指定绿色包目录下的 python.exe，不存在返回空
+CString GetEnvPython(const CString& strRoot);
+
+// 是否存在任意 GPU 绿色包（只查目录，不做探测）
+bool HasAnyGpuEnv();
+
+// 探测后确认可用的 GPU 环境根目录（主包 / CU128 / CU118 中能跑的那个），空表示不可用
+CString GetGpuEnvRoot();
+
 // GPU 可用性探测：在显卡上实际跑一次小计算，结果在进程内缓存。
 // 返回 true 表示可以放心用 GPU 训练/预标注；false 时 pReason 给出原因。
 bool IsGpuUsable(CString* pReason = nullptr, CString* pDeviceName = nullptr);

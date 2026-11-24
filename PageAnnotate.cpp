@@ -2635,8 +2635,8 @@ void CPageAnnotate::OnBnClickedBtnLabelImg()
 		}
 	}
 
-	CString strGreen = bGpu ? GetGreenGpuRoot() : GetGreenRoot();
-	CString strPython = bGpu ? GetGreenGpuPython() : GetGreenPython();
+	CString strGreen = bGpu ? GetGpuEnvRoot() : GetGreenRoot();
+	CString strPython = bGpu ? GetEnvPython(strGreen) : GetGreenPython();
 	if (strGreen.IsEmpty() || strPython.IsEmpty())
 	{
 		AfxMessageBox(bGpu ? _T("未找到 YOLO_Green_GPU 绿色包或 python.exe。")

@@ -210,7 +210,7 @@ BOOL CPageTrain::OnInitDialog()
 	GetDlgItem(IDC_BTN_TRAIN_STOP)->EnableWindow(FALSE);
 
 	CheckDlgButton(IDC_CHK_GPU, BST_UNCHECKED);
-	if (GetGreenGpuRoot().IsEmpty())
+	if (!HasAnyGpuEnv())
 	{
 		GetDlgItem(IDC_CHK_GPU)->EnableWindow(FALSE);
 	}
@@ -650,8 +650,8 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 		}
 	}
 
-	CString strGreen = bGpu ? GetGreenGpuRoot() : GetGreenRoot();
-	CString strPython = bGpu ? GetGreenGpuPython() : GetGreenPython();
+	CString strGreen = bGpu ? GetGpuEnvRoot() : GetGreenRoot();
+	CString strPython = bGpu ? GetEnvPython(strGreen) : GetGreenPython();
 	if (strGreen.IsEmpty() || strPython.IsEmpty())
 	{
 		if (bGpu)
@@ -859,8 +859,8 @@ void CPageTrain::StartExport()
 			AppendLog(strTip);
 		}
 	}
-	CString strGreen = bUseGpu ? GetGreenGpuRoot() : GetGreenRoot();
-	CString strPython = bUseGpu ? GetGreenGpuPython() : GetGreenPython();
+	CString strGreen = bUseGpu ? GetGpuEnvRoot() : GetGreenRoot();
+	CString strPython = bUseGpu ? GetEnvPython(strGreen) : GetGreenPython();
 
 	if (strGreen.IsEmpty() || strPython.IsEmpty())
 	{
@@ -1155,7 +1155,7 @@ void CPageTrain::SetRunning(bool bRunning)
 	GetDlgItem(IDC_EDIT_BATCH)->EnableWindow(bRunning ? FALSE : TRUE);
 	GetDlgItem(IDC_CHK_RESUME)->EnableWindow(bRunning ? FALSE : TRUE);
 	// 探测结果判定为不可用时，不再让使用者勾选 GPU
-	BOOL bEnableGpu = (!bRunning && !GetGreenGpuRoot().IsEmpty()
+	BOOL bEnableGpu = (!bRunning && HasAnyGpuEnv()
 		&& (!m_bGpuProbeDone || m_bGpuUsable)) ? TRUE : FALSE;
 	GetDlgItem(IDC_CHK_GPU)->EnableWindow(bEnableGpu);
 }

@@ -44,7 +44,8 @@ CString GetGreenPython()
 	return _T("");
 }
 
-CString GetGreenGpuRoot()
+// 从 exe 所在目录向上查找指定名称的绿色包目录
+static CString FindEnvRoot(const CString& strName)
 {
 	TCHAR szPath[MAX_PATH] = { 0 };
 	::GetModuleFileName(NULL, szPath, MAX_PATH);
@@ -53,7 +54,7 @@ CString GetGreenGpuRoot()
 	CString strDir = szPath;
 	for (int i = 0; i < 5; i++)
 	{
-		CString strCandidate = strDir + _T("\\YOLO_Green_GPU");
+		CString strCandidate = strDir + _T("\\") + strName;
 		if (::PathIsDirectory(strCandidate))
 			return strCandidate;
 
@@ -65,9 +66,13 @@ CString GetGreenGpuRoot()
 	return _T("");
 }
 
-CString GetGreenGpuPython()
+CString GetGreenGpuRoot()
 {
-	CString strRoot = GetGreenGpuRoot();
+	return FindEnvRoot(_T("YOLO_Green_GPU"));
+}
+
+CString GetEnvPython(const CString& strRoot)
+{
 	if (strRoot.IsEmpty())
 		return _T("");
 
@@ -76,6 +81,35 @@ CString GetGreenGpuPython()
 		return strPy;
 
 	return _T("");
+}
+
+CString GetGreenGpuPython()
+{
+	return GetEnvPython(GetGreenGpuRoot());
+}
+
+// 可用的 GPU 环境包，按优先级排列：主包（cu126）→ cu128（RTX 50 系）→ cu118（老驱动）
+static void GetGpuEnvCandidates(CStringArray& arr)
+{
+	arr.RemoveAll();
+	const TCHAR* szNames[] = {
+		_T("YOLO_Green_GPU"),
+		_T("YOLO_Green_GPU_CU128"),
+		_T("YOLO_Green_GPU_CU118"),
+	};
+	for (int i = 0; i < _countof(szNames); i++)
+	{
+		CString strRoot = FindEnvRoot(szNames[i]);
+		if (!strRoot.IsEmpty() && !GetEnvPython(strRoot).IsEmpty())
+			arr.Add(strRoot);
+	}
+}
+
+bool HasAnyGpuEnv()
+{
+	CStringArray arr;
+	GetGpuEnvCandidates(arr);
+	return arr.GetSize() > 0;
 }
 
 
@@ -668,6 +702,7 @@ static std::mutex g_mtxGpuProbe;
 static int      g_nGpuProbeState = 0;   // 0 未探测, 1 可用, 2 不可用
 static CString  g_strGpuProbeReason;
 static CString  g_strGpuProbeName;
+static CString  g_strGpuActiveRoot;      // 探测通过的 GPU 环境根目录
 
 static const TCHAR* kGpuProbeScript =
 	_T("# -*- coding: utf-8 -*-\n")
@@ -689,9 +724,22 @@ static const TCHAR* kGpuProbeScript =
 	_T("        sys.exit(0)\n")
 	_T("    name = torch.cuda.get_device_name(0)\n")
 	_T("    major, minor = torch.cuda.get_device_capability(0)\n")
+	_T("    cap = 'sm_%d%d' % (major, minor)\n")
+	_T("    archs = [a for a in torch.cuda.get_arch_list() if a.startswith('sm_')]\n")
+	_T("    supported = False\n")
+	_T("    for a in archs:\n")
+	_T("        try:\n")
+	_T("            v = int(a[3:])\n")
+	_T("        except Exception:\n")
+	_T("            continue\n")
+	_T("        if v // 10 == major and v % 10 <= minor:\n")
+	_T("            supported = True\n")
+	_T("    if not supported:\n")
+	_T("        report('ARCH|%s|%s' % (cap, ','.join(archs)))\n")
+	_T("        sys.exit(0)\n")
 	_T("    x = torch.zeros((8, 8), device='cuda') + 1\n")
 	_T("    torch.cuda.synchronize()\n")
-	_T("    report('OK|%s|sm_%d%d' % (name, major, minor))\n")
+	_T("    report('OK|%s|%s' % (name, cap))\n")
 	_T("except Exception as e:\n")
 	_T("    report('FAIL|GPU 计算测试失败: %s' % e)\n");
 
@@ -802,6 +850,61 @@ static CString WriteGpuProbeScript()
 	return strPath;
 }
 
+// 用指定环境探测一次；detail 在 OK 时为算力，在 ARCH 时为「算力|支持列表」
+static int RunGpuProbe(const CString& strPython, const CString& strScript,
+	CString& strName, CString& strDetail)
+{
+	CString strCmd;
+	strCmd.Format(_T("\"%s\" -X utf8 -u \"%s\""),
+		(LPCTSTR)strPython, (LPCTSTR)strScript);
+
+	CString strOut;
+	if (!RunProcessCapture(strCmd, strOut, 120000))
+	{
+		strDetail = _T("GPU 检测超时");
+		return 0;
+	}
+
+	const CString strMark = _T("GPU_PROBE|");
+	int nPos = strOut.Find(strMark);
+	if (nPos < 0)
+	{
+		strDetail = _T("GPU 检测无返回结果");
+		return 0;
+	}
+
+	CString strLine = strOut.Mid(nPos + strMark.GetLength());
+	int nEnd = strLine.Find(_T('\n'));
+	if (nEnd >= 0)
+		strLine = strLine.Left(nEnd);
+	strLine.Trim();
+
+	if (strLine.Left(3) == _T("OK|"))
+	{
+		CString strRest = strLine.Mid(3);
+		int nSep = strRest.Find(_T('|'));
+		if (nSep >= 0)
+		{
+			strName = strRest.Left(nSep);
+			strDetail = strRest.Mid(nSep + 1);
+		}
+		else
+		{
+			strName = strRest;
+		}
+		return 1;
+	}
+
+	if (strLine.Left(5) == _T("ARCH|"))
+	{
+		strDetail = strLine.Mid(5);
+		return 2;
+	}
+
+	strDetail = (strLine.Left(5) == _T("FAIL|")) ? strLine.Mid(5) : strLine;
+	return 0;
+}
+
 bool IsGpuUsable(CString* pReason, CString* pDeviceName)
 {
 	std::lock_guard<std::mutex> lock(g_mtxGpuProbe);
@@ -811,72 +914,57 @@ bool IsGpuUsable(CString* pReason, CString* pDeviceName)
 		int nState = 2;
 		CString strReason;
 		CString strName;
+		CString strArchFail;
+		g_strGpuActiveRoot.Empty();
 
-		CString strPython = GetGreenGpuPython();
-		if (strPython.IsEmpty())
+		CStringArray arrRoots;
+		GetGpuEnvCandidates(arrRoots);
+		CString strScript = WriteGpuProbeScript();
+
+		if (arrRoots.GetSize() == 0)
 		{
-			strReason = _T("未找到 YOLO_Green_GPU 绿色包");
+			strReason = _T("未找到可用的 GPU 绿色包");
+		}
+		else if (strScript.IsEmpty())
+		{
+			strReason = _T("无法生成 GPU 探测脚本");
 		}
 		else
 		{
-			CString strScript = WriteGpuProbeScript();
-			if (strScript.IsEmpty())
+			// 依次尝试各 GPU 环境：主包(cu126) → cu128(RTX 50) → cu118(老驱动)
+			for (int i = 0; i < arrRoots.GetSize(); i++)
 			{
-				strReason = _T("无法生成 GPU 探测脚本");
-			}
-			else
-			{
-				CString strCmd;
-				strCmd.Format(_T("\"%s\" -X utf8 -u \"%s\""),
-					(LPCTSTR)strPython, (LPCTSTR)strScript);
+				CString strRoot = arrRoots[i];
+				CString strProbeName, strDetail;
+				int nResult = RunGpuProbe(GetEnvPython(strRoot), strScript,
+					strProbeName, strDetail);
 
-				CString strOut;
-				if (!RunProcessCapture(strCmd, strOut, 120000))
+				if (nResult == 1)
 				{
-					strReason = _T("GPU 检测超时");
+					nState = 1;
+					strName = strProbeName;
+					strReason = strDetail;
+					g_strGpuActiveRoot = strRoot;
+					break;
+				}
+				if (nResult == 2)
+				{
+					CString strCap = strDetail;
+					int nSep = strDetail.Find(_T('|'));
+					if (nSep >= 0)
+						strCap = strDetail.Left(nSep);
+					strArchFail.Format(
+						_T("显卡算力 %s 不被现有 GPU 环境支持（缺少 YOLO_Green_GPU_CU128 包）"),
+						(LPCTSTR)strCap);
 				}
 				else
 				{
-					const CString strMark = _T("GPU_PROBE|");
-					int nPos = strOut.Find(strMark);
-					if (nPos < 0)
-					{
-						strReason = _T("GPU 检测无返回结果");
-					}
-					else
-					{
-						CString strLine = strOut.Mid(nPos + strMark.GetLength());
-						int nEnd = strLine.Find(_T('\n'));
-						if (nEnd >= 0)
-							strLine = strLine.Left(nEnd);
-						strLine.Trim();
-
-						if (strLine.Left(3) == _T("OK|"))
-						{
-							nState = 1;
-							CString strRest = strLine.Mid(3);
-							int nSep = strRest.Find(_T('|'));
-							if (nSep >= 0)
-							{
-								strName = strRest.Left(nSep);
-								strReason = strRest.Mid(nSep + 1);
-							}
-							else
-							{
-								strName = strRest;
-							}
-						}
-						else if (strLine.Left(5) == _T("FAIL|"))
-						{
-							strReason = strLine.Mid(5);
-						}
-						else
-						{
-							strReason = strLine;
-						}
-					}
+					strReason = strDetail;
 				}
 			}
+
+			if (nState != 1 && !strArchFail.IsEmpty())
+				strReason = strArchFail;
 		}
 
 		g_nGpuProbeState = nState;
@@ -891,10 +979,20 @@ bool IsGpuUsable(CString* pReason, CString* pDeviceName)
 	return g_nGpuProbeState == 1;
 }
 
+CString GetGpuEnvRoot()
+{
+	if (!IsGpuUsable())
+		return _T("");
+
+	std::lock_guard<std::mutex> lock(g_mtxGpuProbe);
+	return g_strGpuActiveRoot;
+}
+
 void InvalidateGpuProbe()
 {
 	std::lock_guard<std::mutex> lock(g_mtxGpuProbe);
 	g_nGpuProbeState = 0;
 	g_strGpuProbeReason.Empty();
 	g_strGpuProbeName.Empty();
+	g_strGpuActiveRoot.Empty();
 }
