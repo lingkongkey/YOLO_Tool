@@ -18,6 +18,9 @@ typedef void (*EnvProgressFn)(int nPercent, int nPhase, LPVOID pUser);
 // 读取环境包清单；清单文件不存在时会在程序目录生成模板
 bool LoadEnvManifest(std::vector<EnvPackageInfo>& arrPkgs);
 
+// 确保 env_manifest.ini 存在（启动时调用一次），返回其路径
+CString EnsureEnvManifest();
+
 // 按名称查找清单项（不区分大小写）
 bool FindEnvPackage(LPCTSTR lpszName, EnvPackageInfo& info);
 

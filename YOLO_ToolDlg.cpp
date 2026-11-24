@@ -9,6 +9,7 @@
 #include "AppConfig.h"
 #include "afxdialogex.h"
 #include "PageAnnotate.h"
+#include "EnvDownloader.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -106,6 +107,10 @@ BOOL CYOLOToolDlg::OnInitDialog()
 	CDialogEx::OnInitDialog();
 
 	SetIcon(m_hIcon, FALSE);
+
+	// 启动时确保 exe 同级存在 env_manifest.ini，方便用户编辑下载地址
+	EnsureEnvManifest();
+
 	extern const WCHAR* g_yema[];
 	m_tab.InsertItem(0, g_yema[0]);
 	m_tab.InsertItem(1, g_yema[1]);

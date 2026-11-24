@@ -280,10 +280,19 @@ bool LoadEnvManifest(std::vector<EnvPackageInfo>& arrPkgs)
 	ParseManifest(strText, arrPkgs);
 	if (arrPkgs.empty())
 	{
+		// 用户清单为空或损坏：用默认值兜底，并把模板写回磁盘供其编辑
 		strText = kDefaultManifest;
+		WriteTextFile(strPath, strText);
 		ParseManifest(strText, arrPkgs);
 	}
 	return !arrPkgs.empty();
+}
+
+CString EnsureEnvManifest()
+{
+	std::vector<EnvPackageInfo> arrPkgs;
+	LoadEnvManifest(arrPkgs);
+	return GetManifestPath();
 }
 
 bool FindEnvPackage(LPCTSTR lpszName, EnvPackageInfo& info)
