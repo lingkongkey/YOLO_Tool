@@ -114,6 +114,7 @@ BOOL CPageCapture::OnInitDialog()
 	
 	FillCaptureList();
 
+
 	return TRUE;
 }
 
@@ -234,6 +235,8 @@ static bool ParseHandleText(const CString& strText, DWORD& dwValue)
 	dwValue = (DWORD)v;
 	return dwValue != 0;
 }
+
+
 
 bool CPageCapture::ValidateTarget(bool bShowError)
 {
