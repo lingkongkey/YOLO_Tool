@@ -2620,6 +2620,21 @@ void CPageAnnotate::GetPtPath()
 void CPageAnnotate::OnBnClickedBtnLabelImg()
 {
 	bool bGpu = (IsDlgButtonChecked(IDC_CHK_ANN_GPU) == BST_CHECKED);
+	if (bGpu)
+	{
+		// 显卡跑不动时自动退回 CPU，使用者不需要自己处理 CUDA
+		CString strReason;
+		SetStatus(_T("正在检测 GPU..."));
+		if (!IsGpuUsable(&strReason))
+		{
+			bGpu = false;
+			CheckDlgButton(IDC_CHK_ANN_GPU, BST_UNCHECKED);
+			CString strTip;
+			strTip.Format(_T("GPU 不可用：%s，已自动使用 CPU 预标注。\r\n"), (LPCTSTR)strReason);
+			AppendLog(strTip);
+		}
+	}
+
 	CString strGreen = bGpu ? GetGreenGpuRoot() : GetGreenRoot();
 	CString strPython = bGpu ? GetGreenGpuPython() : GetGreenPython();
 	if (strGreen.IsEmpty() || strPython.IsEmpty())

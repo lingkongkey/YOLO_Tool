@@ -6,6 +6,7 @@
 #include "AppConfig.h"
 #include <shlwapi.h>
 #include <shlobj.h>
+#include <mutex>
 #pragma comment(lib, "shlwapi.lib")
 
 CString GetGreenRoot()
@@ -656,4 +657,244 @@ void RemoveProjectImageAt(int nIndex)
 	if (nIndex < 0 || nIndex >= g_arrProjectImages.GetSize())
 		return;
 	g_arrProjectImages.RemoveAt(nIndex);
+}
+
+
+// ===== GPU 可用性探测 =====
+// 目的是让使用者完全不用关心 CUDA 版本：真实跑一次显卡计算，
+// 能跑就用 GPU，跑不了就自动退回 CPU。
+
+static std::mutex g_mtxGpuProbe;
+static int      g_nGpuProbeState = 0;   // 0 未探测, 1 可用, 2 不可用
+static CString  g_strGpuProbeReason;
+static CString  g_strGpuProbeName;
+
+static const TCHAR* kGpuProbeScript =
+	_T("# -*- coding: utf-8 -*-\n")
+	_T("import sys\n")
+	_T("\n")
+	_T("def report(msg):\n")
+	_T("    sys.stdout.write('GPU_PROBE|' + msg + '\\n')\n")
+	_T("    sys.stdout.flush()\n")
+	_T("\n")
+	_T("try:\n")
+	_T("    import torch\n")
+	_T("except Exception as e:\n")
+	_T("    report('FAIL|PyTorch 无法加载: %s' % e)\n")
+	_T("    sys.exit(0)\n")
+	_T("\n")
+	_T("try:\n")
+	_T("    if not torch.cuda.is_available():\n")
+	_T("        report('FAIL|未检测到可用的 NVIDIA 显卡或驱动')\n")
+	_T("        sys.exit(0)\n")
+	_T("    name = torch.cuda.get_device_name(0)\n")
+	_T("    major, minor = torch.cuda.get_device_capability(0)\n")
+	_T("    x = torch.zeros((8, 8), device='cuda') + 1\n")
+	_T("    torch.cuda.synchronize()\n")
+	_T("    report('OK|%s|sm_%d%d' % (name, major, minor))\n")
+	_T("except Exception as e:\n")
+	_T("    report('FAIL|GPU 计算测试失败: %s' % e)\n");
+
+static CString Utf8ToWideText(const std::string& str)
+{
+	if (str.empty())
+		return CString();
+	int nWide = ::MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), NULL, 0);
+	if (nWide <= 0)
+		return CString();
+	CString strOut;
+	::MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(),
+		strOut.GetBuffer(nWide), nWide);
+	strOut.ReleaseBuffer(nWide);
+	return strOut;
+}
+
+// 静默执行一个进程并收集其输出（stdout/stderr 合并），带超时
+static bool RunProcessCapture(const CString& strCmd, CString& strOut, DWORD dwTimeoutMs)
+{
+	strOut.Empty();
+
+	SECURITY_ATTRIBUTES sa = { 0 };
+	sa.nLength = sizeof(sa);
+	sa.bInheritHandle = TRUE;
+
+	HANDLE hRead = NULL;
+	HANDLE hWrite = NULL;
+	if (!::CreatePipe(&hRead, &hWrite, &sa, 64 * 1024))
+		return false;
+	::SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
+
+	STARTUPINFO si = { 0 };
+	si.cb = sizeof(si);
+	si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+	si.wShowWindow = SW_HIDE;
+	si.hStdOutput = hWrite;
+	si.hStdError = hWrite;
+
+	PROCESS_INFORMATION pi = { 0 };
+	std::vector<TCHAR> cmd(strCmd.GetLength() + 1);
+	_tcscpy_s(cmd.data(), cmd.size(), strCmd);
+
+	BOOL bOk = ::CreateProcess(NULL, cmd.data(), NULL, NULL, TRUE,
+		CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+	::CloseHandle(hWrite);
+	if (!bOk)
+	{
+		::CloseHandle(hRead);
+		return false;
+	}
+
+	std::string raw;
+	char buf[4096];
+	DWORD nRead = 0;
+
+	const DWORD dwStart = ::GetTickCount();
+	bool bTimeout = false;
+
+	for (;;)
+	{
+		DWORD nAvail = 0;
+		if (::PeekNamedPipe(hRead, NULL, 0, NULL, &nAvail, NULL) && nAvail > 0)
+		{
+			DWORD nWant = (nAvail < (DWORD)sizeof(buf)) ? nAvail : (DWORD)sizeof(buf);
+			if (::ReadFile(hRead, buf, nWant, &nRead, NULL) && nRead > 0)
+				raw.append(buf, nRead);
+			continue;
+		}
+
+		if (::WaitForSingleObject(pi.hProcess, 50) == WAIT_OBJECT_0)
+		{
+			while (::PeekNamedPipe(hRead, NULL, 0, NULL, &nAvail, NULL) && nAvail > 0)
+			{
+				DWORD nWant = (nAvail < (DWORD)sizeof(buf)) ? nAvail : (DWORD)sizeof(buf);
+				if (!::ReadFile(hRead, buf, nWant, &nRead, NULL) || nRead == 0)
+					break;
+				raw.append(buf, nRead);
+			}
+			break;
+		}
+
+		if (::GetTickCount() - dwStart > dwTimeoutMs)
+		{
+			bTimeout = true;
+			::TerminateProcess(pi.hProcess, 1);
+			break;
+		}
+	}
+
+	::CloseHandle(pi.hThread);
+	::CloseHandle(pi.hProcess);
+	::CloseHandle(hRead);
+
+	strOut = Utf8ToWideText(raw);
+	return !bTimeout;
+}
+
+static CString WriteGpuProbeScript()
+{
+	TCHAR szTemp[MAX_PATH] = { 0 };
+	if (::GetTempPath(MAX_PATH, szTemp) == 0)
+		return _T("");
+
+	CString strPath = CString(szTemp) + _T("yolo_gpu_probe.py");
+	if (!WriteTextFileUtf8(strPath, kGpuProbeScript))
+		return _T("");
+	return strPath;
+}
+
+bool IsGpuUsable(CString* pReason, CString* pDeviceName)
+{
+	std::lock_guard<std::mutex> lock(g_mtxGpuProbe);
+
+	if (g_nGpuProbeState == 0)
+	{
+		int nState = 2;
+		CString strReason;
+		CString strName;
+
+		CString strPython = GetGreenGpuPython();
+		if (strPython.IsEmpty())
+		{
+			strReason = _T("未找到 YOLO_Green_GPU 绿色包");
+		}
+		else
+		{
+			CString strScript = WriteGpuProbeScript();
+			if (strScript.IsEmpty())
+			{
+				strReason = _T("无法生成 GPU 探测脚本");
+			}
+			else
+			{
+				CString strCmd;
+				strCmd.Format(_T("\"%s\" -X utf8 -u \"%s\""),
+					(LPCTSTR)strPython, (LPCTSTR)strScript);
+
+				CString strOut;
+				if (!RunProcessCapture(strCmd, strOut, 120000))
+				{
+					strReason = _T("GPU 检测超时");
+				}
+				else
+				{
+					const CString strMark = _T("GPU_PROBE|");
+					int nPos = strOut.Find(strMark);
+					if (nPos < 0)
+					{
+						strReason = _T("GPU 检测无返回结果");
+					}
+					else
+					{
+						CString strLine = strOut.Mid(nPos + strMark.GetLength());
+						int nEnd = strLine.Find(_T('\n'));
+						if (nEnd >= 0)
+							strLine = strLine.Left(nEnd);
+						strLine.Trim();
+
+						if (strLine.Left(3) == _T("OK|"))
+						{
+							nState = 1;
+							CString strRest = strLine.Mid(3);
+							int nSep = strRest.Find(_T('|'));
+							if (nSep >= 0)
+							{
+								strName = strRest.Left(nSep);
+								strReason = strRest.Mid(nSep + 1);
+							}
+							else
+							{
+								strName = strRest;
+							}
+						}
+						else if (strLine.Left(5) == _T("FAIL|"))
+						{
+							strReason = strLine.Mid(5);
+						}
+						else
+						{
+							strReason = strLine;
+						}
+					}
+				}
+			}
+		}
+
+		g_nGpuProbeState = nState;
+		g_strGpuProbeReason = strReason;
+		g_strGpuProbeName = strName;
+	}
+
+	if (pReason)
+		*pReason = g_strGpuProbeReason;
+	if (pDeviceName)
+		*pDeviceName = g_strGpuProbeName;
+	return g_nGpuProbeState == 1;
+}
+
+void InvalidateGpuProbe()
+{
+	std::lock_guard<std::mutex> lock(g_mtxGpuProbe);
+	g_nGpuProbeState = 0;
+	g_strGpuProbeReason.Empty();
+	g_strGpuProbeName.Empty();
 }

@@ -152,6 +152,17 @@ static bool LoadClassTable(std::vector<BYTE>& table)
 	return !table.empty();
 }
 
+static UINT AFX_CDECL GpuProbeThreadProc(LPVOID pParam)
+{
+	// 结果写入 IsGpuUsable 的进程内缓存
+	IsGpuUsable();
+
+	HWND hWnd = (HWND)pParam;
+	if (::IsWindow(hWnd))
+		::PostMessage(hWnd, WM_USER_GPU_PROBE, 0, 0);
+	return 0;
+}
+
 CPageTrain::CPageTrain(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_PAGE_TRAIN, pParent)
 	, m_ptArr(ProjectWeights())
@@ -168,6 +179,7 @@ BEGIN_MESSAGE_MAP(CPageTrain, CDialogEx)
 	ON_BN_CLICKED(IDC_BTN_EXPORT, &CPageTrain::OnBnClickedBtnExport)
 	ON_MESSAGE(WM_USER_RECVLOG, &CPageTrain::OnRecvLog)
 	ON_MESSAGE(WM_USER_PROC_EXIT, &CPageTrain::OnProcExit)
+	ON_MESSAGE(WM_USER_GPU_PROBE, &CPageTrain::OnGpuProbeDone)
 	ON_WM_HELPINFO()
 	ON_WM_CTLCOLOR()
 	ON_CBN_SELCHANGE(IDC_COMBO_EXPORT_FMT2, &CPageTrain::OnCbnSelchangeComboExportFmt2)
@@ -197,9 +209,17 @@ BOOL CPageTrain::OnInitDialog()
 
 	GetDlgItem(IDC_BTN_TRAIN_STOP)->EnableWindow(FALSE);
 
-	if (GetGreenGpuRoot().IsEmpty())
-		GetDlgItem(IDC_CHK_GPU)->EnableWindow(FALSE);
 	CheckDlgButton(IDC_CHK_GPU, BST_UNCHECKED);
+	if (GetGreenGpuRoot().IsEmpty())
+	{
+		GetDlgItem(IDC_CHK_GPU)->EnableWindow(FALSE);
+	}
+	else
+	{
+		// 后台探测显卡是否真能跑，避免使用者自己折腾 CUDA/驱动
+		AfxBeginThread(GpuProbeThreadProc, GetSafeHwnd(),
+			THREAD_PRIORITY_BELOW_NORMAL, 0, 0, NULL);
+	}
 
 	SetStatus(_T("就绪"));
 	Layout();
@@ -613,6 +633,23 @@ void CPageTrain::OnBnClickedBtnTrainStart()
 	UpdateWindow();
 
 	bool bGpu = (IsDlgButtonChecked(IDC_CHK_GPU) == BST_CHECKED);
+	if (bGpu)
+	{
+		// 勾了 GPU 但显卡跑不动（驱动过旧、算力不支持等）时自动退回 CPU
+		CString strReason;
+		if (!IsGpuUsable(&strReason))
+		{
+			bGpu = false;
+			m_bGpuProbeDone = true;
+			m_bGpuUsable = false;
+			CheckDlgButton(IDC_CHK_GPU, BST_UNCHECKED);
+			CString strTip;
+			strTip.Format(_T("==== GPU 不可用：%s，已自动切换为 CPU 训练 ====\r\n"),
+				(LPCTSTR)strReason);
+			AppendLog(strTip);
+		}
+	}
+
 	CString strGreen = bGpu ? GetGreenGpuRoot() : GetGreenRoot();
 	CString strPython = bGpu ? GetGreenGpuPython() : GetGreenPython();
 	if (strGreen.IsEmpty() || strPython.IsEmpty())
@@ -808,6 +845,20 @@ void CPageTrain::StartExport()
 	}
 
 	bool bUseGpu = (IsDlgButtonChecked(IDC_CHK_GPU) == BST_CHECKED);
+	if (bUseGpu)
+	{
+		CString strReason;
+		if (!IsGpuUsable(&strReason))
+		{
+			bUseGpu = false;
+			m_bGpuProbeDone = true;
+			m_bGpuUsable = false;
+			CheckDlgButton(IDC_CHK_GPU, BST_UNCHECKED);
+			CString strTip;
+			strTip.Format(_T("GPU 不可用：%s，导出改用 CPU 环境。\r\n"), (LPCTSTR)strReason);
+			AppendLog(strTip);
+		}
+	}
 	CString strGreen = bUseGpu ? GetGreenGpuRoot() : GetGreenRoot();
 	CString strPython = bUseGpu ? GetGreenGpuPython() : GetGreenPython();
 
@@ -1103,7 +1154,10 @@ void CPageTrain::SetRunning(bool bRunning)
 	GetDlgItem(IDC_EDIT_IMGSZ)->EnableWindow(bRunning ? FALSE : TRUE);
 	GetDlgItem(IDC_EDIT_BATCH)->EnableWindow(bRunning ? FALSE : TRUE);
 	GetDlgItem(IDC_CHK_RESUME)->EnableWindow(bRunning ? FALSE : TRUE);
-	GetDlgItem(IDC_CHK_GPU)->EnableWindow(!bRunning && !GetGreenGpuRoot().IsEmpty() ? TRUE : FALSE);
+	// 探测结果判定为不可用时，不再让使用者勾选 GPU
+	BOOL bEnableGpu = (!bRunning && !GetGreenGpuRoot().IsEmpty()
+		&& (!m_bGpuProbeDone || m_bGpuUsable)) ? TRUE : FALSE;
+	GetDlgItem(IDC_CHK_GPU)->EnableWindow(bEnableGpu);
 }
 
 
@@ -1163,6 +1217,35 @@ LRESULT CPageTrain::OnRecvLog(WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
+
+LRESULT CPageTrain::OnGpuProbeDone(WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+	CString strReason, strName;
+	bool bUsable = IsGpuUsable(&strReason, &strName);
+	m_bGpuProbeDone = true;
+	m_bGpuUsable = bUsable;
+
+	CWnd* pChk = GetDlgItem(IDC_CHK_GPU);
+	if (pChk == NULL)
+		return 0;
+
+	CString strLog;
+	if (!bUsable)
+	{
+		CheckDlgButton(IDC_CHK_GPU, BST_UNCHECKED);
+		pChk->EnableWindow(FALSE);
+		strLog.Format(_T("==== GPU 不可用：%s，已自动使用 CPU 训练 ====\r\n"),
+			(LPCTSTR)strReason);
+	}
+	else
+	{
+		pChk->EnableWindow(m_capture.IsRunning() ? FALSE : TRUE);
+		strLog.Format(_T("==== 已检测到 GPU：%s（%s）====\r\n"),
+			(LPCTSTR)strName, (LPCTSTR)strReason);
+	}
+	AppendLog(strLog);
+	return 0;
+}
 
 LRESULT CPageTrain::OnProcExit(WPARAM wParam, LPARAM lParam)
 {

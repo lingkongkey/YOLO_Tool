@@ -1,9 +1,11 @@
-// PageTrain.h:
+﻿// PageTrain.h:
 //
 #pragma once
 
 #include "afxdialogex.h"
 #include "LogCapture.h"
+
+#define WM_USER_GPU_PROBE (WM_USER + 102)
 
 class CPageTrain : public CDialogEx
 {
@@ -70,6 +72,9 @@ protected:
 	afx_msg LRESULT OnProcExit(WPARAM wParam, LPARAM lParam);
 	long m_Maxline=0; 
 	long m_line=0;	
+	afx_msg LRESULT OnGpuProbeDone(WPARAM wParam, LPARAM lParam);
+	bool m_bGpuProbeDone = false;   // 后台探测是否已结束
+	bool m_bGpuUsable = false;      // 探测结果：GPU 是否真的能跑
 public:
 	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
 	afx_msg void OnCbnSelchangeComboExportFmt2();

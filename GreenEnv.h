@@ -1,4 +1,4 @@
-// GreenEnv.h: YOLO_Green
+﻿// GreenEnv.h: YOLO_Green
 //
 #pragma once
 
@@ -11,6 +11,13 @@ CString GetGreenPython();
 CString GetGreenGpuRoot();
 
 CString GetGreenGpuPython();
+
+// GPU 可用性探测：在显卡上实际跑一次小计算，结果在进程内缓存。
+// 返回 true 表示可以放心用 GPU 训练/预标注；false 时 pReason 给出原因。
+bool IsGpuUsable(CString* pReason = nullptr, CString* pDeviceName = nullptr);
+
+// 清除探测缓存，下次调用重新探测
+void InvalidateGpuProbe();
 
 
 CString GetProjectRoot();
